@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bulk Printer</title>
+    <!-- Chargement de Tailwind CSS pour un design rapide et propre -->
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-50 text-slate-800 font-sans h-screen flex flex-col items-center py-10 px-4">
+    
+    <div class="max-w-3xl w-full bg-white rounded-xl shadow-lg overflow-hidden flex flex-col h-full border border-slate-200">
+      
+      <!-- En-tête -->
+      <div class="bg-blue-600 px-6 py-4">
+        <h1 class="text-xl font-bold text-white flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          Bulk Printer
+        </h1>
+      </div>
+
+      <div class="p-6 flex-1 flex flex-col gap-6">
+        
+        <!-- Zone de sélection d'imprimante -->
+        <div>
+          <label for="printer-select" class="block text-sm font-semibold text-slate-700 mb-2">1. Choisir l'imprimante</label>
+          <select id="printer-select" class="w-full border border-slate-300 rounded-lg px-4 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Chargement des imprimantes...</option>
+          </select>
+        </div>
+
+        <!-- Zone de liste de fichiers (Simule le Drag & Drop pour le moment) -->
+        <div class="flex-1 flex flex-col">
+          <label class="block text-sm font-semibold text-slate-700 mb-2">2. Fichiers à imprimer</label>
+          <div id="drop-zone" class="flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center bg-slate-50 text-slate-500 mb-4 transition-colors hover:bg-slate-100 hover:border-blue-400 cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p>Glissez vos fichiers ici (ou cliquez pour simuler un ajout)</p>
+          </div>
+          
+          <ul id="file-list" class="space-y-2 overflow-y-auto max-h-40">
+            <!-- Les fichiers apparaîtront ici -->
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- Barre d'action -->
+      <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-between items-center">
+        <p id="status-message" class="text-sm font-medium text-slate-600">Prêt.</p>
+        <button id="print-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          Lancer l'impression
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Script principal -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
