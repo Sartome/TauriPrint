@@ -21,8 +21,13 @@ const optColor = document.getElementById("opt-color") as HTMLSelectElement;
 const optDuplex = document.getElementById("opt-duplex") as HTMLSelectElement;
 const optPaper = document.getElementById("opt-paper") as HTMLSelectElement;
 
-// Éléments du DOM (Roadmap V2)
-const optProfile = document.getElementById("opt-profile") as HTMLSelectElement;
+// Éléments du DOM (Options avancées PDF)
+const optPageRange = document.getElementById("opt-page-range") as HTMLInputElement;
+const optPageFilter = document.getElementById("opt-page-filter") as HTMLSelectElement;
+const optScale = document.getElementById("opt-scale") as HTMLSelectElement;
+
+// Éléments de profil
+const profileSelect = document.getElementById("profile-select") as HTMLSelectElement;
 const saveProfileBtn = document.getElementById("save-profile-btn") as HTMLButtonElement;
 const optSchedule = document.getElementById("opt-schedule") as HTMLInputElement;
 const optMergePdf = document.getElementById("opt-merge-pdf") as HTMLInputElement;
@@ -48,25 +53,86 @@ let successPaths: string[] = [];
 
 async function loadPrinters() {
   try {
-    statusMessage.textContent = "Recherche des imprimantes...";
     const printers: string[] = await invoke("get_printers");
-    printerSelect.innerHTML = ""; 
-    if (printers.length === 0) {
-      printerSelect.innerHTML = "<option>Aucune imprimante trouvée</option>";
-      return;
-    }
-    printers.forEach((p) => {
+    printerSelect.innerHTML = "";
+    printers.forEach((printer) => {
       const option = document.createElement("option");
-      option.value = p;
-      option.textContent = p;
+      option.value = printer;
+      option.textContent = printer;
       printerSelect.appendChild(option);
     });
-    statusMessage.textContent = "Prêt.";
+    
+    // Charger le profil après les imprimantes pour sélectionner la bonne
+    loadProfilesFromStorage();
   } catch (error) {
-    statusMessage.textContent = `Erreur: ${error}`;
-    statusMessage.classList.add("text-red-500");
+    statusMessage.textContent = "Erreur de chargement des imprimantes.";
   }
 }
+
+// ==== GESTION DES PROFILS ====
+function loadProfilesFromStorage() {
+  const profilesRaw = localStorage.getItem("tauriPrintProfiles");
+  if (profilesRaw) {
+    try {
+      const profiles = JSON.parse(profilesRaw);
+      profileSelect.innerHTML = '<option value="default">Par défaut</option>';
+      for (const name in profiles) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        profileSelect.appendChild(option);
+      }
+    } catch(e) {}
+  }
+}
+
+profileSelect.addEventListener("change", () => {
+  if (profileSelect.value === "default") return;
+  const profilesRaw = localStorage.getItem("tauriPrintProfiles");
+  if (!profilesRaw) return;
+  const profiles = JSON.parse(profilesRaw);
+  const p = profiles[profileSelect.value];
+  if (p) {
+    if (p.printer && Array.from(printerSelect.options).some(o => o.value === p.printer)) {
+      printerSelect.value = p.printer;
+    }
+    optCopies.value = p.copies || "1";
+    optColor.value = p.color || "true";
+    optDuplex.value = p.duplex || "OneSided";
+    optPaper.value = p.paper || "A4";
+    if (optPageRange) optPageRange.value = p.page_range || "";
+    if (optPageFilter) optPageFilter.value = p.page_filter || "all";
+    if (optScale) optScale.value = p.scale || "fit";
+  }
+});
+
+saveProfileBtn.addEventListener("click", () => {
+  const name = prompt("Entrez un nom pour ce profil d'impression :");
+  if (!name || name.trim() === "") return;
+  
+  const currentConfig = {
+    printer: printerSelect.value,
+    copies: optCopies.value,
+    color: optColor.value,
+    duplex: optDuplex.value,
+    paper: optPaper.value,
+    page_range: optPageRange?.value || "",
+    page_filter: optPageFilter?.value || "all",
+    scale: optScale?.value || "fit"
+  };
+  
+  let profiles: any = {};
+  const profilesRaw = localStorage.getItem("tauriPrintProfiles");
+  if (profilesRaw) {
+    try { profiles = JSON.parse(profilesRaw); } catch(e) {}
+  }
+  
+  profiles[name] = currentConfig;
+  localStorage.setItem("tauriPrintProfiles", JSON.stringify(profiles));
+  
+  loadProfilesFromStorage();
+  profileSelect.value = name;
+});
 
 function addFile(filePath: string) {
   if (filesToPrint.includes(filePath)) return;
@@ -158,49 +224,8 @@ filterImgBtn.addEventListener("click", () => {
   renderFileList();
 });
 
-// ==== V2: PROFILS ====
-function loadProfiles() {
-  const profiles = JSON.parse(localStorage.getItem("printProfiles") || "{}");
-  // Garder uniquement l'option Défaut
-  optProfile.innerHTML = '<option value="">-- Nouveau / Défaut --</option>';
-  Object.keys(profiles).forEach(name => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    optProfile.appendChild(opt);
-  });
-}
+// (Les profils sont gérés par le nouveau système profileSelect/tauriPrintProfiles ci-dessus)
 
-saveProfileBtn.addEventListener("click", () => {
-  const name = prompt("Nom du profil à sauvegarder ?");
-  if (!name) return;
-  const profiles = JSON.parse(localStorage.getItem("printProfiles") || "{}");
-  profiles[name] = {
-    copies: optCopies.value,
-    color: optColor.value,
-    duplex: optDuplex.value,
-    paper: optPaper.value,
-    merge: optMergePdf.checked,
-    slip: optSlipSheets.checked
-  };
-  localStorage.setItem("printProfiles", JSON.stringify(profiles));
-  loadProfiles();
-  optProfile.value = name;
-});
-
-optProfile.addEventListener("change", () => {
-  if (!optProfile.value) return;
-  const profiles = JSON.parse(localStorage.getItem("printProfiles") || "{}");
-  const p = profiles[optProfile.value];
-  if (p) {
-    optCopies.value = p.copies;
-    optColor.value = p.color;
-    optDuplex.value = p.duplex;
-    optPaper.value = p.paper;
-    optMergePdf.checked = p.merge || false;
-    optSlipSheets.checked = p.slip || false;
-  }
-});
 
 // ==== V2: LOGS ====
 function logPrint(status: string, file: string, printer: string) {
@@ -233,7 +258,11 @@ async function executePrintProcess() {
     copies: parseInt(optCopies.value) || 1,
     color: optColor.value === "true",
     duplex: optDuplex.value,
-    paper_size: optPaper.value
+    paper_size: optPaper.value,
+    page_range: optPageRange?.value || "",
+    page_filter: optPageFilter?.value || "all",
+    scale: optScale?.value || "fit",
+    reverse: false
   };
 
   if (optMergePdf.checked) {
@@ -351,7 +380,7 @@ function initTheme() {
 window.addEventListener("DOMContentLoaded", () => {
   initTheme();
   loadPrinters();
-  loadProfiles();
+  loadProfilesFromStorage();
   setupTauriDragDrop();
 });
 

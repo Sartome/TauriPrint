@@ -15,6 +15,40 @@ pub struct PrintOptions {
     color: bool,
     duplex: String,
     paper_size: String,
+    // Nouvelles options avancées
+    #[serde(default)]
+    page_range: String,       // ex: "1-5,7,10" ou vide = toutes
+    #[serde(default)]
+    page_filter: String,      // "all", "even", "odd"
+    #[serde(default)]
+    scale: String,            // "fit", "shrink", "noscale"
+    #[serde(default)]
+    _reverse: bool,            // Impression en ordre inversé
+}
+
+/// Résout le chemin de SumatraPDF embarqué dans les ressources de l'application.
+fn get_sumatra_path(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    // En mode dev, SumatraPDF est dans src-tauri/resources/
+    let resource_dir = app_handle
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Impossible de trouver le dossier ressources: {}", e))?;
+    let sumatra = resource_dir.join("resources").join("SumatraPDF.exe");
+    if sumatra.exists() {
+        return Ok(sumatra);
+    }
+    // Fallback : directement dans resources/
+    let sumatra_alt = resource_dir.join("SumatraPDF.exe");
+    if sumatra_alt.exists() {
+        return Ok(sumatra_alt);
+    }
+    // Dernier fallback : chemin relatif (mode dev)
+    let dev_path = std::path::PathBuf::from("resources").join("SumatraPDF.exe");
+    if dev_path.exists() {
+        return Ok(dev_path);
+    }
+    Err("SumatraPDF.exe introuvable dans les ressources de l'application.".to_string())
 }
 
 #[tauri::command]
@@ -96,6 +130,7 @@ fn open_file_dialog() -> Result<Vec<String>, String> {
 
 #[tauri::command]
 fn print_file(
+    app_handle: tauri::AppHandle,
     file_path: String,
     printer: String,
     options: Option<PrintOptions>,
@@ -104,79 +139,154 @@ fn print_file(
         return Err("Le chemin du fichier est invalide.".to_string());
     }
     let copies = options.as_ref().map(|o| o.copies).unwrap_or(1).max(1);
+    let is_pdf = file_path.to_lowercase().ends_with(".pdf");
 
     #[cfg(target_os = "windows")]
     {
-        let color_str = options
-            .as_ref()
-            .map(|o| if o.color { "$true" } else { "$false" })
-            .unwrap_or("$true");
-        let duplex_str = options
-            .as_ref()
-            .map(|o| o.duplex.as_str())
-            .unwrap_or("OneSided");
-        let paper_size_str = options
-            .as_ref()
-            .map(|o| o.paper_size.as_str())
-            .unwrap_or("A4");
+        if is_pdf {
+            // === MOTEUR SUMATRAPDF (pour les PDF) ===
+            let sumatra = get_sumatra_path(&app_handle)?;
 
-        let ps_script = format!(
-            r#"
-            $ErrorActionPreference = 'Stop'
-            try {{
-                $PrinterName = '{}'
-                $FilePath = "{}"
-                
-                $DefaultPrinter = (Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default=$true").Name
-                $Network = New-Object -ComObject WScript.Network
-                $Network.SetDefaultPrinter($PrinterName)
-                
-                $oldConfig = Get-PrintConfiguration -PrinterName $PrinterName
-                Set-PrintConfiguration -PrinterName $PrinterName -Color {} -DuplexingMode {} -PaperSize {}
-                
-                for ($i = 1; $i -le {}; $i++) {{
-                    $proc = Start-Process -FilePath $FilePath -Verb Print -WindowStyle Hidden -PassThru
-                    if ($null -ne $proc) {{
-                        try {{
-                            $proc | Wait-Process -Timeout 10 -ErrorAction Stop
-                        }} catch {{ }}
-                        if (-not $proc.HasExited) {{
-                            $proc | Stop-Process -Force -ErrorAction SilentlyContinue
+            // Construire les print-settings
+            let mut settings_parts: Vec<String> = Vec::new();
+
+            // Plage de pages
+            let page_range = options.as_ref().map(|o| o.page_range.as_str()).unwrap_or("");
+            if !page_range.is_empty() {
+                settings_parts.push(page_range.to_string());
+            }
+
+            // Pages paires / impaires
+            let page_filter = options.as_ref().map(|o| o.page_filter.as_str()).unwrap_or("all");
+            match page_filter {
+                "even" => settings_parts.push("even".to_string()),
+                "odd" => settings_parts.push("odd".to_string()),
+                _ => {}
+            }
+
+            // Couleur / N&B
+            let color = options.as_ref().map(|o| o.color).unwrap_or(true);
+            settings_parts.push(if color { "color".to_string() } else { "monochrome".to_string() });
+
+            // Recto-verso
+            let duplex = options.as_ref().map(|o| o.duplex.as_str()).unwrap_or("OneSided");
+            match duplex {
+                "TwoSidedLongEdge" => settings_parts.push("duplexlong".to_string()),
+                "TwoSidedShortEdge" => settings_parts.push("duplexshort".to_string()),
+                _ => settings_parts.push("simplex".to_string()),
+            }
+
+            // Mise à l'échelle
+            let scale = options.as_ref().map(|o| o.scale.as_str()).unwrap_or("fit");
+            match scale {
+                "noscale" => settings_parts.push("noscale".to_string()),
+                "shrink" => settings_parts.push("shrink".to_string()),
+                _ => settings_parts.push("fit".to_string()),
+            }
+
+            // Taille du papier
+            let paper = options.as_ref().map(|o| o.paper_size.as_str()).unwrap_or("A4");
+            settings_parts.push(format!("paper={}", paper));
+
+            // Nombre de copies
+            if copies > 1 {
+                settings_parts.push(format!("{}x", copies));
+            }
+
+            let settings_str = settings_parts.join(",");
+
+            let mut cmd = Command::new(&sumatra);
+            cmd.creation_flags(0x08000000);
+            cmd.args([
+                "-print-to",
+                &printer,
+                "-print-settings",
+                &settings_str,
+                "-silent",
+                &file_path,
+            ]);
+
+            let output = cmd.output().map_err(|e| format!("Échec SumatraPDF: {}", e))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !stderr.is_empty() {
+                    return Err(format!("Erreur SumatraPDF: {}", stderr));
+                }
+            }
+        } else {
+            // === FALLBACK POWERSHELL (pour les fichiers non-PDF) ===
+            let color_str = options
+                .as_ref()
+                .map(|o| if o.color { "$true" } else { "$false" })
+                .unwrap_or("$true");
+            let duplex_str = options
+                .as_ref()
+                .map(|o| o.duplex.as_str())
+                .unwrap_or("OneSided");
+            let paper_size_str = options
+                .as_ref()
+                .map(|o| o.paper_size.as_str())
+                .unwrap_or("A4");
+
+            let ps_script = format!(
+                r#"
+                $ErrorActionPreference = 'Stop'
+                try {{
+                    $PrinterName = '{}'
+                    $FilePath = "{}"
+                    
+                    $DefaultPrinter = (Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default=$true").Name
+                    $Network = New-Object -ComObject WScript.Network
+                    $Network.SetDefaultPrinter($PrinterName)
+                    
+                    $oldConfig = Get-PrintConfiguration -PrinterName $PrinterName
+                    Set-PrintConfiguration -PrinterName $PrinterName -Color {} -DuplexingMode {} -PaperSize {}
+                    
+                    for ($i = 1; $i -le {}; $i++) {{
+                        $proc = Start-Process -FilePath $FilePath -Verb Print -WindowStyle Hidden -PassThru
+                        if ($null -ne $proc) {{
+                            try {{
+                                $proc | Wait-Process -Timeout 10 -ErrorAction Stop
+                            }} catch {{ }}
+                            if (-not $proc.HasExited) {{
+                                $proc | Stop-Process -Force -ErrorAction SilentlyContinue
+                            }}
+                        }} else {{
+                            Start-Sleep -Seconds 10
                         }}
-                    }} else {{
-                        Start-Sleep -Seconds 10
+                        Start-Sleep -Seconds 2
                     }}
-                    Start-Sleep -Seconds 2
+                    
+                    Set-PrintConfiguration -PrinterName $PrinterName -Color $oldConfig.Color -DuplexingMode $oldConfig.DuplexingMode -PaperSize $oldConfig.PaperSize
+                    
+                    if ($DefaultPrinter) {{ $Network.SetDefaultPrinter($DefaultPrinter) }}
+                }} catch {{
+                    Write-Error $_.Exception.Message
+                    exit 1
                 }}
-                
-                Set-PrintConfiguration -PrinterName $PrinterName -Color $oldConfig.Color -DuplexingMode $oldConfig.DuplexingMode -PaperSize $oldConfig.PaperSize
-                
-                if ($DefaultPrinter) {{ $Network.SetDefaultPrinter($DefaultPrinter) }}
-            }} catch {{
-                Write-Error $_.Exception.Message
-                exit 1
-            }}
-            "#,
-            printer.replace("'", "''"),
-            file_path.replace("'", "''"),
-            color_str,
-            duplex_str,
-            paper_size_str,
-            copies
-        );
+                "#,
+                printer.replace("'", "''"),
+                file_path.replace("'", "''"),
+                color_str,
+                duplex_str,
+                paper_size_str,
+                copies
+            );
 
-        let mut cmd = Command::new("powershell");
-        cmd.creation_flags(0x08000000);
-        let output = cmd
-            .args(["-Command", &ps_script])
-            .output()
-            .map_err(|e| format!("Échec PowerShell: {}", e))?;
+            let mut cmd = Command::new("powershell");
+            cmd.creation_flags(0x08000000);
+            let output = cmd
+                .args(["-Command", &ps_script])
+                .output()
+                .map_err(|e| format!("Échec PowerShell: {}", e))?;
 
-        if !output.status.success() {
-            return Err(format!(
-                "Erreur d'impression: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
+            if !output.status.success() {
+                return Err(format!(
+                    "Erreur d'impression: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
         }
     }
 
@@ -273,7 +383,7 @@ fn check_print_jobs(printer: String) -> Result<u32, String> {
 }
 
 #[tauri::command]
-fn merge_pdfs(paths: Vec<String>) -> Result<String, String> {
+fn merge_pdfs(_paths: Vec<String>) -> Result<String, String> {
     // La fusion via lopdf requiert un traitement complexe (mapping d'IDs d'objets, ressources, etc.).
     // Pour l'instant, on prévient l'utilisateur que c'est une fonctionnalité "expérimentale" qui
     // nécessiterait un script Python ou Ghostscript pour être 100% robuste avec des PDF complexes.
