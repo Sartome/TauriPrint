@@ -10,8 +10,8 @@ const printBtn = document.getElementById("print-btn") as HTMLButtonElement;
 const statusMessage = document.getElementById("status-message") as HTMLParagraphElement;
 const sortBtn = document.getElementById("sort-btn") as HTMLButtonElement;
 const themeToggle = document.getElementById("theme-toggle") as HTMLButtonElement;
-const moonIcon = document.getElementById("moon-icon") as SVGElement;
-const sunIcon = document.getElementById("sun-icon") as SVGElement;
+const moonIcon = document.getElementById("moon-icon") as unknown as SVGElement;
+const sunIcon = document.getElementById("sun-icon") as unknown as SVGElement;
 
 // Éléments du DOM (Options)
 const toggleOptionsBtn = document.getElementById("toggle-options-btn") as HTMLButtonElement;
