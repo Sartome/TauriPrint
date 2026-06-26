@@ -50,7 +50,7 @@ Les outils de build Windows pour Tauri (Visual Studio C++ Build Tools).
 Cloner et lancer le projet
 
 # 1. Cloner le dépôt
-git clone [https://github.com/VOTRE_NOM/TauriPrint.git](https://github.com/VOTRE_NOM/TauriPrint.git)
+git clone [https://github.com/SartomeTauriPrint]
 cd TauriPrint/rustprinter
 
 # 2. Installer les dépendances frontend
@@ -70,20 +70,6 @@ npm run tauri build
 
 
 L'exécutable se trouvera dans le dossier src-tauri/target/release/.
-
-🗺️ Roadmap (À venir)
-
-[x] Interface de base avec glisser-déposer.
-
-[x] Détection dynamique des imprimantes système.
-
-[x] Moteur d'impression natif via API Windows (ou intégration SumatraPDF).
-
-[x] Prise en charge d'autres formats que le PDF (DOCX, XLSX, Images).
-
-[x] Tri manuel et alphabétique de la file d'attente.
-
-[x] Mode sombre.
 
 🤝 Contribuer
 

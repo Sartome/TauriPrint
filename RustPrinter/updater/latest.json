@@ -1,0 +1,11 @@
+{
+  "version": "v0.1.1",
+  "notes": "Ceci est une mise à jour d'exemple. Vous pourrez lister vos nouveautés ici.",
+  "pub_date": "2026-06-26T15:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "VOTRE_SIGNATURE_ICI",
+      "url": "https://github.com/Sartome/TauriPrint/releases/download/v0.1.1/TauriPrint_0.1.1_x64-setup.nsis.zip"
+    }
+  }
+}

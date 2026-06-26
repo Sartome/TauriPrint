@@ -22,9 +22,22 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUyMjM4QURDRkJCM0EwMUIKUldRYm9MUDczSW9qVXMvanJrem8xd0V5MWJlS3Q2UW1YcnZ6cmxXcnNsU2tMWWRPbWJ1NHdIcFAK",
+      "endpoints": [
+        "https://github.com/Sartome/TauriPrint/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "publisher": "Sartome",
+    "shortDescription": "L'utilitaire ultime d'impression par lots sans limites.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { check } from "@tauri-apps/plugin-updater";
 
 // Éléments du DOM (Principaux)
 const printerSelect = document.getElementById("printer-select") as HTMLSelectElement;
@@ -373,6 +374,36 @@ dropZone.addEventListener("click", async () => {
     console.error(err);
   }
 });
+
+const updateBtn = document.getElementById("update-btn") as HTMLButtonElement | null;
+if (updateBtn) {
+  updateBtn.addEventListener("click", async () => {
+    try {
+      updateBtn.disabled = true;
+      const originalText = updateBtn.innerHTML;
+      updateBtn.innerHTML = "Recherche en cours...";
+      
+      const update = await check();
+      if (update) {
+        const wantsUpdate = confirm(`Une nouvelle version (${update.version}) est disponible !\n\nNotes :\n${update.body || 'Améliorations diverses'}\n\nVoulez-vous la télécharger et l'installer maintenant ?`);
+        if (wantsUpdate) {
+          updateBtn.innerHTML = "Téléchargement & Installation...";
+          await update.downloadAndInstall();
+          alert("Mise à jour installée avec succès. L'application va redémarrer.");
+        }
+      } else {
+        alert("Vous possédez déjà la dernière version de TauriPrint !");
+      }
+      updateBtn.innerHTML = originalText;
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors de la recherche de mise à jour: " + e);
+      updateBtn.innerHTML = "Rechercher une mise à jour";
+    } finally {
+      updateBtn.disabled = false;
+    }
+  });
+}
 
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
