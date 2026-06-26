@@ -12,3 +12,9 @@
 
 # Accidental terminal output
 2
+
+# Tauri signing keys
+tauri_key.key
+tauri_key.key.pub
+*.key
+
