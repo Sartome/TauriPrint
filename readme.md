@@ -1,14 +1,17 @@
-🖨️ PrintMax (Bulk Printer)
+<div align="center">
+  <img src="RustPrinter/public/TauriPrint.png" alt="TauriPrint Logo" width="128" />
+  <h1>TauriPrint (Bulk Printer)</h1>
+</div>
 
 L'alternative libre, rapide et sans limites pour l'impression de documents en masse.
 
 📖 À propos du projet
 
-PrintMax est né d'une frustration simple : la plupart des utilitaires d'impression par lots (Bulk Printers) adoptent des modèles économiques agressifs (Bait-and-Switch) en bloquant l'utilisateur après 3 impressions pour le forcer à acheter une licence "Pro".
+TauriPrint est né d'une frustration simple : la plupart des utilitaires d'impression par lots (Bulk Printers) adoptent des modèles économiques agressifs (Bait-and-Switch) en bloquant l'utilisateur après 3 impressions pour le forcer à acheter une licence "Pro".
 
 Ce projet est la réponse open-source à ce problème.
 
-Construit avec Tauri et Rust, PrintMax est un utilitaire de bureau ultra-léger qui permet de glisser-déposer des dizaines de fichiers et de les envoyer silencieusement vers votre imprimante de manière séquentielle, sans jamais ouvrir la moindre application tierce.
+Construit avec Tauri et Rust, TauriPrint est un utilitaire de bureau ultra-léger qui permet de glisser-déposer des dizaines de fichiers et de les envoyer silencieusement vers votre imprimante de manière séquentielle, sans jamais ouvrir la moindre application tierce.
 
 ✨ Fonctionnalités principales
 
@@ -47,8 +50,8 @@ Les outils de build Windows pour Tauri (Visual Studio C++ Build Tools).
 Cloner et lancer le projet
 
 # 1. Cloner le dépôt
-git clone [https://github.com/VOTRE_NOM/PrintMax.git](https://github.com/VOTRE_NOM/PrintMax.git)
-cd PrintMax/rustprinter
+git clone [https://github.com/VOTRE_NOM/TauriPrint.git](https://github.com/VOTRE_NOM/TauriPrint.git)
+cd TauriPrint/rustprinter
 
 # 2. Installer les dépendances frontend
 npm install
@@ -74,13 +77,13 @@ L'exécutable se trouvera dans le dossier src-tauri/target/release/.
 
 [x] Détection dynamique des imprimantes système.
 
-[ ] Moteur d'impression natif via API Windows (ou intégration SumatraPDF).
+[x] Moteur d'impression natif via API Windows (ou intégration SumatraPDF).
 
-[ ] Prise en charge d'autres formats que le PDF (DOCX, XLSX, Images).
+[x] Prise en charge d'autres formats que le PDF (DOCX, XLSX, Images).
 
-[ ] Tri manuel et alphabétique de la file d'attente.
+[x] Tri manuel et alphabétique de la file d'attente.
 
-[ ] Mode sombre.
+[x] Mode sombre.
 
 🤝 Contribuer
 

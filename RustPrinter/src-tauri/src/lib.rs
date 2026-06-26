@@ -1,42 +1,288 @@
 // src-tauri/src/lib.rs
 
-// 1. Commande pour lister les imprimantes
-// Pour l'instant, on renvoie une liste simulée. 
-// Plus tard, nous utiliserons des commandes PowerShell ou l'API Windows pour récupérer les vraies imprimantes.
-#[tauri::command]
-fn get_printers() -> Vec<String> {
-    vec![
-        "Microsoft Print to PDF".to_string(),
-        "Fax".to_string(),
-        "Imprimante Bureau_HP".to_string(),
-    ]
+use std::process::Command;
+use std::fs;
+use std::io::Write;
+use walkdir::WalkDir;
+use std::path::Path;
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+pub struct PrintOptions {
+    copies: u32,
+    color: bool,
+    duplex: String,
+    paper_size: String,
 }
 
-// 2. Commande pour imprimer un fichier
-// Gère les erreurs proprement avec Result<String, String> pour que TypeScript puisse les "catch"
 #[tauri::command]
-fn print_file(file_path: String, printer: String) -> Result<String, String> {
-    println!(">>> Rust a reçu l'ordre d'imprimer : {} sur {}", file_path, printer);
-    
-    // Simulation d'un temps de traitement pour voir l'interface réagir
-    std::thread::sleep(std::time::Duration::from_secs(1));
+fn get_printers() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("powershell")
+            .args(["-Command", "Get-Printer | Select-Object -ExpandProperty Name"])
+            .output()
+            .map_err(|e| format!("Échec de l'exécution PowerShell: {}", e))?;
 
-    if file_path.is_empty() {
-        return Err("Le chemin du fichier est invalide.".to_string());
+        if !output.status.success() {
+            return Err("Erreur lors de la récupération des imprimantes".to_string());
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let printers: Vec<String> = stdout
+            .lines()
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.is_empty())
+            .collect();
+
+        Ok(printers)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("lpstat")
+            .args(["-p"])
+            .output()
+            .map_err(|e| format!("Échec de lpstat: {}", e))?;
+            
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut printers = Vec::new();
+        for line in stdout.lines() {
+            if line.starts_with("printer ") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() > 1 { printers.push(parts[1].to_string()); }
+            }
+        }
+        Ok(printers)
+    }
+}
+
+#[tauri::command]
+fn open_file_dialog() -> Result<Vec<String>, String> {
+    let script = r#"
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $dialog.Multiselect = $true
+        $dialog.Filter = "Tous les fichiers (*.*)|*.*|Fichiers PDF (*.pdf)|*.pdf|Images|*.png;*.jpg;*.jpeg"
+        $dialog.Title = "Sélectionnez les fichiers à imprimer"
+        if ($dialog.ShowDialog() -eq 'OK') {
+            $dialog.FileNames -join "|"
+        }
+    "#;
+    let output = std::process::Command::new("powershell")
+        .args(&["-Sta", "-Command", script])
+        .output()
+        .map_err(|e| e.to_string())?;
+        
+    let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if result.is_empty() {
+        return Ok(Vec::new());
+    }
+    
+    let paths: Vec<String> = result.split('|').map(|s| s.to_string()).collect();
+    Ok(paths)
+}
+
+#[tauri::command]
+fn print_file(file_path: String, printer: String, options: Option<PrintOptions>) -> Result<String, String> {
+    if file_path.is_empty() { return Err("Le chemin du fichier est invalide.".to_string()); }
+    let copies = options.as_ref().map(|o| o.copies).unwrap_or(1).max(1);
+
+    #[cfg(target_os = "windows")]
+    {
+        let color_str = options.as_ref().map(|o| if o.color { "$true" } else { "$false" }).unwrap_or("$true");
+        let duplex_str = options.as_ref().map(|o| o.duplex.as_str()).unwrap_or("OneSided");
+        let paper_size_str = options.as_ref().map(|o| o.paper_size.as_str()).unwrap_or("A4");
+
+        let ps_script = format!(
+            r#"
+            $ErrorActionPreference = 'Stop'
+            try {{
+                $PrinterName = '{}'
+                $FilePath = "{}"
+                
+                $DefaultPrinter = (Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default=$true").Name
+                $Network = New-Object -ComObject WScript.Network
+                $Network.SetDefaultPrinter($PrinterName)
+                
+                $oldConfig = Get-PrintConfiguration -PrinterName $PrinterName
+                Set-PrintConfiguration -PrinterName $PrinterName -Color {} -DuplexingMode {} -PaperSize {}
+                
+                for ($i = 1; $i -le {}; $i++) {{
+                    $proc = Start-Process -FilePath $FilePath -Verb Print -WindowStyle Hidden -PassThru
+                    if ($null -ne $proc) {{
+                        try {{
+                            $proc | Wait-Process -Timeout 10 -ErrorAction Stop
+                        }} catch {{ }}
+                        if (-not $proc.HasExited) {{
+                            $proc | Stop-Process -Force -ErrorAction SilentlyContinue
+                        }}
+                    }} else {{
+                        Start-Sleep -Seconds 10
+                    }}
+                    Start-Sleep -Seconds 2
+                }}
+                
+                Set-PrintConfiguration -PrinterName $PrinterName -Color $oldConfig.Color -DuplexingMode $oldConfig.DuplexingMode -PaperSize $oldConfig.PaperSize
+                
+                if ($DefaultPrinter) {{ $Network.SetDefaultPrinter($DefaultPrinter) }}
+            }} catch {{
+                Write-Error $_.Exception.Message
+                exit 1
+            }}
+            "#,
+            printer.replace("'", "''"), file_path.replace("'", "''"), color_str, duplex_str, paper_size_str, copies
+        );
+
+        let output = Command::new("powershell")
+            .args(["-Command", &ps_script])
+            .output()
+            .map_err(|e| format!("Échec PowerShell: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!("Erreur d'impression: {}", String::from_utf8_lossy(&output.stderr)));
+        }
     }
 
-    // Le succès renvoie un simple message formaté
-    Ok(format!("Le fichier {} a été expédié au spooler.", file_path))
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("lp")
+            .args(["-d", &printer, "-n", &copies.to_string(), &file_path])
+            .output()
+            .map_err(|e| format!("Échec lp: {}", e))?;
+        if !output.status.success() {
+            return Err(format!("Erreur CUPS: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+    }
+
+    Ok(format!("Le fichier {} a été expédié au spooler ({} copies).", file_path, copies))
+}
+
+#[tauri::command]
+fn process_dropped_paths(paths: Vec<String>) -> Vec<String> {
+    let mut files = Vec::new();
+    for path_str in paths {
+        let path = Path::new(&path_str);
+        if path.is_file() {
+            files.push(path_str);
+        } else if path.is_dir() {
+            for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+                if entry.path().is_file() {
+                    if let Some(p) = entry.path().to_str() {
+                        files.push(p.to_string());
+                    }
+                }
+            }
+        }
+    }
+    files
+}
+
+#[tauri::command]
+fn generate_slip_sheet(text: String) -> Result<String, String> {
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("slip_sheet_{}.txt", text.replace(" ", "_")));
+    let mut file = fs::File::create(&file_path).map_err(|e| e.to_string())?;
+    
+    let content = format!("\n\n========================================\n\n  PAGE DE GARDE\n  Document : {}\n\n========================================\n", text);
+    file.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
+    
+    Ok(file_path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn export_logs(logs: Vec<String>, dest_path: String) -> Result<String, String> {
+    let mut file = fs::File::create(&dest_path).map_err(|e| e.to_string())?;
+    file.write_all(b"Date,Statut,Fichier,Imprimante\n").map_err(|e| e.to_string())?;
+    for log in logs {
+        file.write_all(format!("{}\n", log).as_bytes()).map_err(|e| e.to_string())?;
+    }
+    Ok(format!("Logs exportés vers {}", dest_path))
+}
+
+#[tauri::command]
+fn check_print_jobs(printer: String) -> Result<u32, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("powershell")
+            .args(["-Command", &format!("(Get-PrintJob -PrinterName '{}').Count", printer.replace("'", "''"))])
+            .output()
+            .map_err(|e| format!("Erreur PS: {}", e))?;
+        Ok(String::from_utf8_lossy(&output.stdout).trim().parse::<u32>().unwrap_or(0))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(0) // Placeholder
+    }
+}
+
+#[tauri::command]
+fn merge_pdfs(paths: Vec<String>) -> Result<String, String> {
+    // La fusion via lopdf requiert un traitement complexe (mapping d'IDs d'objets, ressources, etc.).
+    // Pour l'instant, on prévient l'utilisateur que c'est une fonctionnalité "expérimentale" qui 
+    // nécessiterait un script Python ou Ghostscript pour être 100% robuste avec des PDF complexes.
+    // L'implémentation complète avec lopdf pur prendrait plusieurs centaines de lignes.
+    Err("La fusion PDF native en Rust est en cours de développement (expérimental). Désactivez la fusion pour le moment.".to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // Enregistrement de nos fonctions pour qu'elles soient visibles par TypeScript
         .invoke_handler(tauri::generate_handler![
             get_printers,
-            print_file
+            print_file,
+            process_dropped_paths,
+            generate_slip_sheet,
+            export_logs,
+            check_print_jobs,
+            merge_pdfs,
+            open_file_dialog
         ])
         .run(tauri::generate_context!())
         .expect("Erreur fatale lors du lancement de l'application Tauri");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_generate_slip_sheet() {
+        let res = generate_slip_sheet("Test Doc".to_string());
+        assert!(res.is_ok());
+        let path = res.unwrap();
+        assert!(fs::metadata(&path).is_ok());
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("Test Doc"));
+    }
+
+    #[test]
+    fn test_export_logs() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_logs.csv");
+        let logs = vec!["2023-01-01,Succès,fichier.pdf,Imprimante1".to_string()];
+        
+        let res = export_logs(logs, file_path.to_string_lossy().to_string());
+        assert!(res.is_ok());
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert!(content.contains("Date,Statut,Fichier,Imprimante"));
+        assert!(content.contains("fichier.pdf"));
+    }
+
+    #[test]
+    fn test_process_dropped_paths() {
+        let temp_dir = std::env::temp_dir().join("printmax_test_dir");
+        let _ = fs::create_dir_all(&temp_dir);
+        let file1 = temp_dir.join("test1.txt");
+        let file2 = temp_dir.join("test2.txt");
+        let _ = fs::write(&file1, "hello");
+        let _ = fs::write(&file2, "world");
+
+        let paths = vec![temp_dir.to_string_lossy().to_string()];
+        let results = process_dropped_paths(paths);
+        
+        assert!(results.len() >= 2);
+        assert!(results.iter().any(|p| p.contains("test1.txt")));
+        assert!(results.iter().any(|p| p.contains("test2.txt")));
+    }
 }
