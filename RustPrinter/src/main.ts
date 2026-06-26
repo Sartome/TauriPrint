@@ -10,8 +10,8 @@ const printBtn = document.getElementById("print-btn") as HTMLButtonElement;
 const statusMessage = document.getElementById("status-message") as HTMLParagraphElement;
 const sortBtn = document.getElementById("sort-btn") as HTMLButtonElement;
 const themeToggle = document.getElementById("theme-toggle") as HTMLButtonElement;
-const moonIcon = document.getElementById("moon-icon") as any;
-const sunIcon = document.getElementById("sun-icon") as any;
+const moonIcon = document.getElementById("moon-icon") as SVGElement;
+const sunIcon = document.getElementById("sun-icon") as SVGElement;
 
 // Éléments du DOM (Options)
 const toggleOptionsBtn = document.getElementById("toggle-options-btn") as HTMLButtonElement;
@@ -44,10 +44,32 @@ const modalErrorCount = document.getElementById("modal-error-count") as HTMLSpan
 const modalCleanBtn = document.getElementById("modal-clean-btn") as HTMLButtonElement;
 const modalCloseBtn = document.getElementById("modal-close-btn") as HTMLButtonElement;
 
+// Éléments du DOM (Phase 2 — Nouveautés)
+const fileCountBadge = document.getElementById("file-count") as HTMLSpanElement;
+const clearAllBtn = document.getElementById("clear-all-btn") as HTMLButtonElement;
+const cancelBtn = document.getElementById("cancel-btn") as HTMLButtonElement;
+const progressSection = document.getElementById("progress-section") as HTMLDivElement;
+const progressBar = document.getElementById("progress-bar") as HTMLDivElement;
+const progressCounter = document.getElementById("progress-counter") as HTMLSpanElement;
+const progressLabel = document.getElementById("progress-label") as HTMLSpanElement;
+
 // État de l'application
 let filesToPrint: string[] = [];
 let printLogs: string[] = []; 
 let successPaths: string[] = [];
+let printCancelled = false;
+
+// Interfaces pour le typage
+interface PrintProfile {
+  printer: string;
+  copies: string;
+  color: string;
+  duplex: string;
+  paper: string;
+  page_range: string;
+  page_filter: string;
+  scale: string;
+}
 
 // ==== FONCTIONS DE BASE ====
 
@@ -66,7 +88,13 @@ async function loadPrinters() {
     loadProfilesFromStorage();
   } catch (error) {
     statusMessage.textContent = "Erreur de chargement des imprimantes.";
+    console.error("Erreur chargement imprimantes:", error);
   }
+}
+
+// ==== COMPTEUR DE FICHIERS ====
+function updateFileCount() {
+  fileCountBadge.textContent = filesToPrint.length.toString();
 }
 
 // ==== GESTION DES PROFILS ====
@@ -74,7 +102,7 @@ function loadProfilesFromStorage() {
   const profilesRaw = localStorage.getItem("tauriPrintProfiles");
   if (profilesRaw) {
     try {
-      const profiles = JSON.parse(profilesRaw);
+      const profiles: Record<string, PrintProfile> = JSON.parse(profilesRaw);
       profileSelect.innerHTML = '<option value="default">Par défaut</option>';
       for (const name in profiles) {
         const option = document.createElement("option");
@@ -82,7 +110,9 @@ function loadProfilesFromStorage() {
         option.textContent = name;
         profileSelect.appendChild(option);
       }
-    } catch(e) {}
+    } catch(e) {
+      console.warn("Profils corrompus dans le localStorage:", e);
+    }
   }
 }
 
@@ -90,19 +120,23 @@ profileSelect.addEventListener("change", () => {
   if (profileSelect.value === "default") return;
   const profilesRaw = localStorage.getItem("tauriPrintProfiles");
   if (!profilesRaw) return;
-  const profiles = JSON.parse(profilesRaw);
-  const p = profiles[profileSelect.value];
-  if (p) {
-    if (p.printer && Array.from(printerSelect.options).some(o => o.value === p.printer)) {
-      printerSelect.value = p.printer;
+  try {
+    const profiles: Record<string, PrintProfile> = JSON.parse(profilesRaw);
+    const p = profiles[profileSelect.value];
+    if (p) {
+      if (p.printer && Array.from(printerSelect.options).some(o => o.value === p.printer)) {
+        printerSelect.value = p.printer;
+      }
+      optCopies.value = p.copies || "1";
+      optColor.value = p.color || "true";
+      optDuplex.value = p.duplex || "OneSided";
+      optPaper.value = p.paper || "A4";
+      if (optPageRange) optPageRange.value = p.page_range || "";
+      if (optPageFilter) optPageFilter.value = p.page_filter || "all";
+      if (optScale) optScale.value = p.scale || "fit";
     }
-    optCopies.value = p.copies || "1";
-    optColor.value = p.color || "true";
-    optDuplex.value = p.duplex || "OneSided";
-    optPaper.value = p.paper || "A4";
-    if (optPageRange) optPageRange.value = p.page_range || "";
-    if (optPageFilter) optPageFilter.value = p.page_filter || "all";
-    if (optScale) optScale.value = p.scale || "fit";
+  } catch(e) {
+    console.warn("Erreur de lecture du profil:", e);
   }
 });
 
@@ -110,7 +144,7 @@ saveProfileBtn.addEventListener("click", () => {
   const name = prompt("Entrez un nom pour ce profil d'impression :");
   if (!name || name.trim() === "") return;
   
-  const currentConfig = {
+  const currentConfig: PrintProfile = {
     printer: printerSelect.value,
     copies: optCopies.value,
     color: optColor.value,
@@ -121,10 +155,12 @@ saveProfileBtn.addEventListener("click", () => {
     scale: optScale?.value || "fit"
   };
   
-  let profiles: any = {};
+  let profiles: Record<string, PrintProfile> = {};
   const profilesRaw = localStorage.getItem("tauriPrintProfiles");
   if (profilesRaw) {
-    try { profiles = JSON.parse(profilesRaw); } catch(e) {}
+    try { profiles = JSON.parse(profilesRaw); } catch(e) {
+      console.warn("Profils corrompus, réinitialisation:", e);
+    }
   }
   
   profiles[name] = currentConfig;
@@ -140,16 +176,32 @@ function addFile(filePath: string) {
   renderFileList();
 }
 
-function renderFileList() {
+async function renderFileList() {
   fileList.innerHTML = "";
-  filesToPrint.forEach((filePath, index) => {
+  updateFileCount();
+
+  for (let index = 0; index < filesToPrint.length; index++) {
+    const filePath = filesToPrint[index];
     const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    const isPdf = filePath.toLowerCase().endsWith(".pdf");
     const li = document.createElement("li");
     li.className = "flex justify-between items-center bg-slate-100 dark:bg-slate-700/80 px-3 py-2 rounded text-sm text-slate-700 dark:text-slate-200 cursor-grab active:cursor-grabbing border border-transparent dark:border-slate-600 transition-colors";
     li.draggable = true;
     li.dataset.index = index.toString();
+
+    // Info pages pour les PDF
+    let pageInfo = "";
+    if (isPdf) {
+      try {
+        const pageCount: number = await invoke("get_pdf_page_count", { filePath });
+        pageInfo = `<span class="ml-2 text-xs text-slate-400 dark:text-slate-500 font-mono">${pageCount}p</span>`;
+      } catch {
+        pageInfo = `<span class="ml-2 text-xs text-slate-400 dark:text-slate-500 font-mono">?p</span>`;
+      }
+    }
+
     li.innerHTML = `
-      <span class="truncate flex-1 pointer-events-none" title="${filePath}">${fileName}</span>
+      <span class="truncate flex-1 pointer-events-none" title="${filePath}">${fileName}${pageInfo}</span>
       <button class="ml-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-bold" onclick="removeFile(${index})">✕</button>
       <span class="ml-4 text-xs font-semibold text-slate-400 dark:text-slate-400 status-badge pointer-events-none">En attente</span>
     `;
@@ -159,7 +211,7 @@ function renderFileList() {
     li.addEventListener("dragenter", handleDragEnter);
     li.addEventListener("dragleave", handleDragLeave);
     fileList.appendChild(li);
-  });
+  }
 }
 
 let draggedItemIndex: number | null = null;
@@ -180,7 +232,7 @@ function handleDrop(e: DragEvent) {
   draggedItemIndex = null;
 }
 
-(window as any).removeFile = (index: number) => {
+(window as unknown as Record<string, (index: number) => void>).removeFile = (index: number) => {
   filesToPrint.splice(index, 1);
   renderFileList();
 };
@@ -194,13 +246,20 @@ function sortFilesAlphabetically() {
   renderFileList();
 }
 
-// ==== V2: DOSSIERS ====
+// ==== BOUTON TOUT VIDER ====
+clearAllBtn.addEventListener("click", () => {
+  if (filesToPrint.length === 0) return;
+  filesToPrint = [];
+  renderFileList();
+  statusMessage.textContent = "Liste vidée.";
+});
+
+// ==== DOSSIERS ====
 async function setupTauriDragDrop() {
   await listen("tauri://drag-drop", async (event) => {
-    const payload = event.payload as any;
+    const payload = event.payload as { paths?: string[] };
     if (payload && payload.paths) {
       statusMessage.textContent = "Analyse des fichiers...";
-      // Rust va analyser les dossiers et retourner tous les fichiers
       try {
         const files: string[] = await invoke("process_dropped_paths", { paths: payload.paths });
         files.forEach((path) => addFile(path));
@@ -213,7 +272,7 @@ async function setupTauriDragDrop() {
   });
 }
 
-// ==== V2: FILTRES ====
+// ==== FILTRES ====
 filterPdfBtn.addEventListener("click", () => {
   filesToPrint = filesToPrint.filter(f => f.toLowerCase().endsWith(".pdf"));
   renderFileList();
@@ -224,10 +283,7 @@ filterImgBtn.addEventListener("click", () => {
   renderFileList();
 });
 
-// (Les profils sont gérés par le nouveau système profileSelect/tauriPrintProfiles ci-dessus)
-
-
-// ==== V2: LOGS ====
+// ==== LOGS ====
 function logPrint(status: string, file: string, printer: string) {
   const date = new Date().toISOString();
   printLogs.push(`"${date}","${status}","${file}","${printer}"`);
@@ -242,20 +298,45 @@ exportLogsBtn.addEventListener("click", async () => {
   }
 });
 
+// ==== BARRE DE PROGRESSION ====
+function showProgress(current: number, total: number) {
+  progressSection.classList.remove("hidden");
+  const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+  progressBar.style.width = `${pct}%`;
+  progressCounter.textContent = `${current} / ${total}`;
+  progressLabel.textContent = current === total ? "Impression terminée !" : "Impression en cours...";
+}
+
+function hideProgress() {
+  progressSection.classList.add("hidden");
+  progressBar.style.width = "0%";
+}
+
 // ==== IMPRESSION (AVEC PLANIFICATEUR, MERGE ET SLIP SHEETS) ====
 async function executePrintProcess() {
   const selectedPrinter = printerSelect.value;
   if (!selectedPrinter || filesToPrint.length === 0) return;
 
+  // Confirmation avant impression
+  const fileCount = filesToPrint.length;
+  const copies = parseInt(optCopies.value) || 1;
+  const confirmMsg = `Vous êtes sur le point d'imprimer ${fileCount} fichier(s) (${copies} copie(s) chacun) sur « ${selectedPrinter} ».\n\nContinuer ?`;
+  if (!confirm(confirmMsg)) {
+    statusMessage.textContent = "Impression annulée par l'utilisateur.";
+    return;
+  }
+
   printBtn.disabled = true;
+  cancelBtn.classList.remove("hidden");
   exportLogsBtn.classList.add("hidden");
-  printLogs = []; // Reset logs
+  printCancelled = false;
+  printLogs = [];
   successPaths = [];
   let errorCount = 0;
   const listItems = fileList.querySelectorAll("li");
 
   const options = {
-    copies: parseInt(optCopies.value) || 1,
+    copies: copies,
     color: optColor.value === "true",
     duplex: optDuplex.value,
     paper_size: optPaper.value,
@@ -268,7 +349,6 @@ async function executePrintProcess() {
   if (optMergePdf.checked) {
     statusMessage.textContent = "Fusion des PDF en cours...";
     try {
-      // V2: Merge PDFs
       const mergedFile: string = await invoke("merge_pdfs", { paths: filesToPrint });
       statusMessage.textContent = "Impression du PDF fusionné...";
       await invoke("print_file", { filePath: mergedFile, printer: selectedPrinter, options });
@@ -281,19 +361,31 @@ async function executePrintProcess() {
       logPrint("Erreur Fusion", "Lot Fusionné", selectedPrinter);
     }
     printBtn.disabled = false;
+    cancelBtn.classList.add("hidden");
     exportLogsBtn.classList.remove("hidden");
+    hideProgress();
     return;
   }
 
+  // Afficher la barre de progression
+  showProgress(0, filesToPrint.length);
+
   for (let i = 0; i < filesToPrint.length; i++) {
+    // Vérifier l'annulation
+    if (printCancelled) {
+      statusMessage.textContent = `Impression annulée. ${successPaths.length} fichier(s) imprimé(s) sur ${filesToPrint.length}.`;
+      break;
+    }
+
     const file = filesToPrint[i];
     const badge = listItems[i].querySelector(".status-badge") as HTMLSpanElement;
     badge.textContent = "Impression...";
     badge.className = "ml-4 text-xs font-semibold text-blue-500 status-badge";
-    statusMessage.textContent = `Impression de ${file.split(/[/\\]/).pop()}...`;
+    statusMessage.textContent = `Impression de ${file.split(/[/\\]/).pop()}... (${i + 1}/${filesToPrint.length})`;
+    showProgress(i, filesToPrint.length);
 
     try {
-      // V2: Slip sheets
+      // Slip sheets
       if (optSlipSheets.checked) {
         const slipFile: string = await invoke("generate_slip_sheet", { text: file.split(/[/\\]/).pop() || file });
         await invoke("print_file", { filePath: slipFile, printer: selectedPrinter, options: { copies: 1, color: false, duplex: "OneSided", paper_size: "A4" } });
@@ -310,13 +402,18 @@ async function executePrintProcess() {
       logPrint(`Erreur: ${error}`, file, selectedPrinter);
       errorCount++;
     }
+
+    showProgress(i + 1, filesToPrint.length);
   }
 
-  statusMessage.textContent = "Impression par lots terminée !";
+  if (!printCancelled) {
+    statusMessage.textContent = "Impression par lots terminée !";
+  }
   printBtn.disabled = false;
+  cancelBtn.classList.add("hidden");
   exportLogsBtn.classList.remove("hidden");
 
-  // V2: Affichage Modal
+  // Affichage Modal
   modalSuccessCount.textContent = successPaths.length.toString();
   modalErrorCount.textContent = errorCount.toString();
   printModal.classList.remove("hidden");
@@ -331,7 +428,7 @@ async function startPrinting() {
   if (!selectedPrinter) { statusMessage.textContent = "Sélectionnez une imprimante."; return; }
   if (filesToPrint.length === 0) { statusMessage.textContent = "Aucun fichier."; return; }
 
-  // V2: Planificateur
+  // Planificateur
   if (optSchedule.value) {
     const now = new Date();
     const [hours, minutes] = optSchedule.value.split(":");
@@ -339,7 +436,7 @@ async function startPrinting() {
     scheduledTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
     
     if (scheduledTime < now) {
-      scheduledTime.setDate(scheduledTime.getDate() + 1); // C'est pour le lendemain
+      scheduledTime.setDate(scheduledTime.getDate() + 1);
     }
     
     const delay = scheduledTime.getTime() - now.getTime();
@@ -352,6 +449,19 @@ async function startPrinting() {
     executePrintProcess();
   }
 }
+
+// ==== ANNULATION ====
+cancelBtn.addEventListener("click", () => {
+  printCancelled = true;
+  cancelBtn.disabled = true;
+  cancelBtn.textContent = "Annulation...";
+  statusMessage.textContent = "Annulation en cours, veuillez patienter...";
+  // L'annulation prend effet au prochain tour de la boucle for dans executePrintProcess
+  setTimeout(() => {
+    cancelBtn.disabled = false;
+    cancelBtn.textContent = "✕ Annuler";
+  }, 2000);
+});
 
 // ==== THEME ====
 function toggleDarkMode() {
@@ -380,7 +490,6 @@ function initTheme() {
 window.addEventListener("DOMContentLoaded", () => {
   initTheme();
   loadPrinters();
-  loadProfilesFromStorage();
   setupTauriDragDrop();
 });
 
@@ -443,6 +552,7 @@ function closeModal() {
   printModalContent.classList.add("scale-95");
   setTimeout(() => {
     printModal.classList.add("hidden");
+    hideProgress();
   }, 300);
 }
 

@@ -234,7 +234,7 @@ fn print_file(
                 $ErrorActionPreference = 'Stop'
                 try {{
                     $PrinterName = '{}'
-                    $FilePath = "{}"
+                    $FilePath = '{}'
                     
                     $DefaultPrinter = (Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default=$true").Name
                     $Network = New-Object -ComObject WScript.Network
@@ -384,11 +384,18 @@ fn check_print_jobs(printer: String) -> Result<u32, String> {
 
 #[tauri::command]
 fn merge_pdfs(_paths: Vec<String>) -> Result<String, String> {
-    // La fusion via lopdf requiert un traitement complexe (mapping d'IDs d'objets, ressources, etc.).
-    // Pour l'instant, on prévient l'utilisateur que c'est une fonctionnalité "expérimentale" qui
-    // nécessiterait un script Python ou Ghostscript pour être 100% robuste avec des PDF complexes.
-    // L'implémentation complète avec lopdf pur prendrait plusieurs centaines de lignes.
     Err("La fusion PDF native en Rust est en cours de développement (expérimental). Désactivez la fusion pour le moment.".to_string())
+}
+
+/// Retourne le nombre de pages d'un fichier PDF via lopdf.
+#[tauri::command]
+fn get_pdf_page_count(file_path: String) -> Result<u32, String> {
+    if !file_path.to_lowercase().ends_with(".pdf") {
+        return Err("Le fichier n'est pas un PDF.".to_string());
+    }
+    let doc = lopdf::Document::load(&file_path)
+        .map_err(|e| format!("Impossible de lire le PDF: {}", e))?;
+    Ok(doc.get_pages().len() as u32)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -403,7 +410,8 @@ pub fn run() {
             export_logs,
             check_print_jobs,
             merge_pdfs,
-            open_file_dialog
+            open_file_dialog,
+            get_pdf_page_count
         ])
         .run(tauri::generate_context!())
         .expect("Erreur fatale lors du lancement de l'application Tauri");

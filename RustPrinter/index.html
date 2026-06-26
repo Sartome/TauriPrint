@@ -66,17 +66,8 @@
         <!-- Paramètres d'impression -->
         <div id="options-panel" class="hidden bg-slate-100/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-5 grid grid-cols-2 gap-4 transition-all shadow-inner">
           
-          <!-- Ligne Profils & Planificateur -->
-          <div class="col-span-2 grid grid-cols-2 gap-4 border-b border-slate-200 dark:border-slate-700 pb-4 mb-2">
-            <div>
-              <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Profils d'impression</label>
-              <div class="flex gap-2">
-                <select id="opt-profile" class="flex-1 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
-                  <option value="">-- Défaut --</option>
-                </select>
-                <button id="save-profile-btn" class="bg-blue-100/80 dark:bg-indigo-900/40 text-blue-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 dark:hover:bg-indigo-800 transition-all shadow-sm active:scale-95">💾 Sauver</button>
-              </div>
-            </div>
+          <!-- Ligne Planificateur -->
+          <div class="col-span-2 border-b border-slate-200 dark:border-slate-700 pb-4 mb-2">
             <div>
               <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Planifier (Heure)</label>
               <input type="time" id="opt-schedule" class="w-full border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
@@ -113,9 +104,9 @@
 
           <!-- Ligne Extra Options -->
           <div class="col-span-2 flex flex-col gap-2 mt-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-            <label class="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:text-blue-600 transition-colors">
-              <input type="checkbox" id="opt-merge-pdf" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 transition-all">
-              Fusionner en un seul PDF <span class="text-xs text-slate-400">(Recommandé pour les gros lots)</span>
+            <label class="flex items-center gap-2 text-sm font-medium text-slate-400 dark:text-slate-500 cursor-not-allowed" title="Fonctionnalité en cours de développement">
+              <input type="checkbox" id="opt-merge-pdf" class="rounded text-slate-400 focus:ring-slate-400 w-4 h-4 transition-all" disabled>
+              Fusionner en un seul PDF <span class="text-xs text-slate-400">(Bientôt disponible)</span>
             </label>
             <label class="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:text-blue-600 transition-colors">
               <input type="checkbox" id="opt-slip-sheets" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 transition-all">
@@ -159,10 +150,16 @@
         <!-- Zone de liste de fichiers -->
         <div class="flex-1 flex flex-col">
           <div class="flex justify-between items-end mb-3">
-            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300">2. Fichiers à imprimer</label>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              2. Fichiers à imprimer
+              <span id="file-count" class="bg-blue-100 dark:bg-indigo-900/40 text-blue-700 dark:text-indigo-300 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+            </label>
             <div class="flex gap-2 items-center">
               <button id="filter-pdf-btn" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-xs font-semibold text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-md transition-all active:scale-95 shadow-sm">📄 Uniquement PDF</button>
               <button id="filter-img-btn" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-xs font-semibold text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-md transition-all active:scale-95 shadow-sm">❌ Ignorer Images</button>
+              <button id="clear-all-btn" class="bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-xs font-semibold text-red-600 dark:text-red-400 px-2.5 py-1 rounded-md transition-all active:scale-95 shadow-sm" title="Tout supprimer">
+                🗑️ Tout vider
+              </button>
               <button id="sort-btn" class="bg-blue-50 hover:bg-blue-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/60 text-xs font-bold text-blue-600 dark:text-indigo-400 px-2.5 py-1 rounded-md transition-all flex items-center gap-1 active:scale-95 shadow-sm">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
@@ -211,6 +208,17 @@
 
       </div>
 
+      <!-- Barre de progression (cachée par défaut) -->
+      <div id="progress-section" class="hidden px-6 py-3 bg-slate-50/80 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-700">
+        <div class="flex justify-between items-center mb-1.5">
+          <span id="progress-label" class="text-xs font-semibold text-slate-600 dark:text-slate-300">Impression en cours...</span>
+          <span id="progress-counter" class="text-xs font-bold text-blue-600 dark:text-indigo-400">0 / 0</span>
+        </div>
+        <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
+          <div id="progress-bar" class="bg-gradient-to-r from-blue-500 to-indigo-500 h-2.5 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+        </div>
+      </div>
+
       <!-- Barre d'action -->
       <div class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center transition-colors duration-500 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div class="flex items-center gap-4">
@@ -218,15 +226,20 @@
           <p id="status-message" class="text-sm font-semibold text-slate-600 dark:text-slate-300">Prêt.</p>
           <button id="export-logs-btn" class="hidden text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors underline decoration-indigo-300 decoration-2 underline-offset-2">Exporter le rapport</button>
         </div>
-        <button id="print-btn" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold py-2.5 px-8 rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none">
-          Lancer l'impression
-        </button>
+        <div class="flex items-center gap-3">
+          <button id="cancel-btn" class="hidden bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg shadow-red-500/30 transition-all hover:-translate-y-0.5 active:translate-y-0">
+            ✕ Annuler
+          </button>
+          <button id="print-btn" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold py-2.5 px-8 rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none">
+            Lancer l'impression
+          </button>
+        </div>
       </div>
 
     </div>
 
     <!-- Modal de Fin d'impression -->
-    <div id="print-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 dark:bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+    <div id="print-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-slate-900/40 dark:bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
       <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 transform scale-95 transition-transform duration-300 border border-slate-100 dark:border-slate-700" id="print-modal-content">
         <h2 class="text-2xl font-extrabold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
           🎉 Impression terminée
