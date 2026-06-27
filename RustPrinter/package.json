@@ -1,9 +1,11 @@
 {
   "name": "tauriprint",
   "private": true,
-  "version": "0.1.7",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
+    "predev": "node sync-version.js",
+    "prebuild": "node sync-version.js",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -12,7 +14,8 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
-    "@tauri-apps/plugin-updater": "^2.10.1"
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "@tauri-apps/plugin-notification": "^2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check } from "@tauri-apps/plugin-updater";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 
 // Éléments du DOM (Principaux)
 const printerSelect = document.getElementById("printer-select") as HTMLSelectElement;
@@ -12,6 +17,7 @@ const sortBtn = document.getElementById("sort-btn") as HTMLButtonElement;
 const themeToggle = document.getElementById("theme-toggle") as HTMLButtonElement;
 const moonIcon = document.getElementById("moon-icon") as unknown as SVGElement;
 const sunIcon = document.getElementById("sun-icon") as unknown as SVGElement;
+const appVersionSpan = document.getElementById("app-version") as HTMLSpanElement;
 
 // Éléments du DOM (Options)
 const toggleOptionsBtn = document.getElementById("toggle-options-btn") as HTMLButtonElement;
@@ -25,6 +31,7 @@ const optPaper = document.getElementById("opt-paper") as HTMLSelectElement;
 const optPageRange = document.getElementById("opt-page-range") as HTMLInputElement;
 const optPageFilter = document.getElementById("opt-page-filter") as HTMLSelectElement;
 const optScale = document.getElementById("opt-scale") as HTMLSelectElement;
+const optRetry = document.getElementById("opt-retry") as HTMLSelectElement;
 
 // Éléments de profil
 const profileSelect = document.getElementById("profile-select") as HTMLSelectElement;
@@ -53,11 +60,19 @@ const progressBar = document.getElementById("progress-bar") as HTMLDivElement;
 const progressCounter = document.getElementById("progress-counter") as HTMLSpanElement;
 const progressLabel = document.getElementById("progress-label") as HTMLSpanElement;
 
+// Éléments du DOM (Hot Folder)
+const hotFolderSelectBtn = document.getElementById("hot-folder-select-btn") as HTMLButtonElement;
+const hotFolderStopBtn = document.getElementById("hot-folder-stop-btn") as HTMLButtonElement;
+const hotFolderPath = document.getElementById("hot-folder-path") as HTMLParagraphElement;
+const hotFolderStatus = document.getElementById("hot-folder-status") as HTMLSpanElement;
+
 // État de l'application
 let filesToPrint: string[] = [];
 let printLogs: string[] = []; 
 let successPaths: string[] = [];
 let printCancelled = false;
+let hotFolderActive = false;
+let currentHotFolderPath = "";
 
 // Interfaces pour le typage
 interface PrintProfile {
@@ -71,7 +86,39 @@ interface PrintProfile {
   scale: string;
 }
 
-// ==== FONCTIONS DE BASE ====
+interface PrintOptionsPayload {
+  copies: number;
+  color: boolean;
+  duplex: string;
+  paper_size: string;
+  page_range: string;
+  page_filter: string;
+  scale: string;
+  reverse: boolean;
+}
+
+// ============================================================
+// NOTIFICATIONS SYSTÈME
+// ============================================================
+
+async function notify(title: string, body: string) {
+  try {
+    let granted = await isPermissionGranted();
+    if (!granted) {
+      const permission = await requestPermission();
+      granted = permission === "granted";
+    }
+    if (granted) {
+      sendNotification({ title, body });
+    }
+  } catch (e) {
+    console.warn("Notification non supportée:", e);
+  }
+}
+
+// ============================================================
+// FONCTIONS DE BASE
+// ============================================================
 
 async function loadPrinters() {
   try {
@@ -92,12 +139,18 @@ async function loadPrinters() {
   }
 }
 
-// ==== COMPTEUR DE FICHIERS ====
+// ============================================================
+// COMPTEUR DE FICHIERS
+// ============================================================
+
 function updateFileCount() {
   fileCountBadge.textContent = filesToPrint.length.toString();
 }
 
-// ==== GESTION DES PROFILS ====
+// ============================================================
+// GESTION DES PROFILS
+// ============================================================
+
 function loadProfilesFromStorage() {
   const profilesRaw = localStorage.getItem("tauriPrintProfiles");
   if (profilesRaw) {
@@ -169,6 +222,10 @@ saveProfileBtn.addEventListener("click", () => {
   loadProfilesFromStorage();
   profileSelect.value = name;
 });
+
+// ============================================================
+// GESTION DES FICHIERS
+// ============================================================
 
 function addFile(filePath: string) {
   if (filesToPrint.includes(filePath)) return;
@@ -298,7 +355,10 @@ exportLogsBtn.addEventListener("click", async () => {
   }
 });
 
-// ==== BARRE DE PROGRESSION ====
+// ============================================================
+// BARRE DE PROGRESSION
+// ============================================================
+
 function showProgress(current: number, total: number) {
   progressSection.classList.remove("hidden");
   const pct = total > 0 ? Math.round((current / total) * 100) : 0;
@@ -312,7 +372,61 @@ function hideProgress() {
   progressBar.style.width = "0%";
 }
 
-// ==== IMPRESSION (AVEC PLANIFICATEUR, MERGE ET SLIP SHEETS) ====
+// ============================================================
+// OPTIONS UTILITAIRES
+// ============================================================
+
+function getCurrentOptions(): PrintOptionsPayload {
+  return {
+    copies: parseInt(optCopies.value) || 1,
+    color: optColor.value === "true",
+    duplex: optDuplex.value,
+    paper_size: optPaper.value,
+    page_range: optPageRange?.value || "",
+    page_filter: optPageFilter?.value || "all",
+    scale: optScale?.value || "fit",
+    reverse: false
+  };
+}
+
+// ============================================================
+// NOUVEAU — RETRY AUTOMATIQUE
+// ============================================================
+
+/**
+ * Tente d'imprimer un fichier avec un nombre de tentatives configurable.
+ * En cas d'échec, attend 2 secondes avant de réessayer.
+ */
+async function printWithRetry(
+  file: string,
+  printer: string,
+  options: PrintOptionsPayload,
+  maxRetries: number
+): Promise<string> {
+  let lastError = "";
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result: string = await invoke("print_file", {
+        filePath: file,
+        printer,
+        options,
+      });
+      return result;
+    } catch (error) {
+      lastError = String(error);
+      if (attempt < maxRetries) {
+        // Attendre 2 secondes avant de réessayer
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+  }
+  throw new Error(lastError);
+}
+
+// ============================================================
+// IMPRESSION PRINCIPALE
+// ============================================================
+
 async function executePrintProcess() {
   const selectedPrinter = printerSelect.value;
   if (!selectedPrinter || filesToPrint.length === 0) return;
@@ -320,7 +434,8 @@ async function executePrintProcess() {
   // Confirmation avant impression
   const fileCount = filesToPrint.length;
   const copies = parseInt(optCopies.value) || 1;
-  const confirmMsg = `Vous êtes sur le point d'imprimer ${fileCount} fichier(s) (${copies} copie(s) chacun) sur « ${selectedPrinter} ».\n\nContinuer ?`;
+  const maxRetries = parseInt(optRetry?.value || "0");
+  const confirmMsg = `Vous êtes sur le point d'imprimer ${fileCount} fichier(s) (${copies} copie(s) chacun) sur « ${selectedPrinter} ».${maxRetries > 0 ? `\nRetry: ${maxRetries} tentative(s) en cas d'erreur.` : ""}\n\nContinuer ?`;
   if (!confirm(confirmMsg)) {
     statusMessage.textContent = "Impression annulée par l'utilisateur.";
     return;
@@ -335,45 +450,51 @@ async function executePrintProcess() {
   let errorCount = 0;
   const listItems = fileList.querySelectorAll("li");
 
-  const options = {
-    copies: copies,
-    color: optColor.value === "true",
-    duplex: optDuplex.value,
-    paper_size: optPaper.value,
-    page_range: optPageRange?.value || "",
-    page_filter: optPageFilter?.value || "all",
-    scale: optScale?.value || "fit",
-    reverse: false
-  };
+  const options = getCurrentOptions();
 
+  // === FUSION PDF ===
   if (optMergePdf.checked) {
     statusMessage.textContent = "Fusion des PDF en cours...";
     try {
-      const mergedFile: string = await invoke("merge_pdfs", { paths: filesToPrint });
+      const mergedFile: string = await invoke("merge_pdfs", {
+        paths: filesToPrint,
+      });
       statusMessage.textContent = "Impression du PDF fusionné...";
-      await invoke("print_file", { filePath: mergedFile, printer: selectedPrinter, options });
+      await printWithRetry(mergedFile, selectedPrinter, options, maxRetries);
       logPrint("Succès", "Lot Fusionné", selectedPrinter);
       successPaths = [...filesToPrint];
       statusMessage.textContent = "Lot fusionné imprimé !";
+      await notify("TauriPrint", `Lot fusionné imprimé avec succès (${filesToPrint.length} fichiers).`);
     } catch (e) {
       statusMessage.textContent = `Erreur fusion: ${e}`;
       errorCount = filesToPrint.length;
-      logPrint("Erreur Fusion", "Lot Fusionné", selectedPrinter);
+      logPrint(`Erreur Fusion: ${e}`, "Lot Fusionné", selectedPrinter);
+      await notify("TauriPrint — Erreur", `Échec de la fusion/impression: ${e}`);
     }
     printBtn.disabled = false;
     cancelBtn.classList.add("hidden");
     exportLogsBtn.classList.remove("hidden");
     hideProgress();
+
+    // Affichage Modal
+    modalSuccessCount.textContent = successPaths.length.toString();
+    modalErrorCount.textContent = errorCount.toString();
+    printModal.classList.remove("hidden");
+    setTimeout(() => {
+      printModal.classList.remove("opacity-0");
+      printModalContent.classList.remove("scale-95");
+    }, 50);
     return;
   }
 
-  // Afficher la barre de progression
+  // === IMPRESSION SÉQUENTIELLE ===
   showProgress(0, filesToPrint.length);
 
   for (let i = 0; i < filesToPrint.length; i++) {
     // Vérifier l'annulation
     if (printCancelled) {
       statusMessage.textContent = `Impression annulée. ${successPaths.length} fichier(s) imprimé(s) sur ${filesToPrint.length}.`;
+      await notify("TauriPrint", `Impression annulée. ${successPaths.length}/${filesToPrint.length} fichier(s) imprimé(s).`);
       break;
     }
 
@@ -391,16 +512,36 @@ async function executePrintProcess() {
         await invoke("print_file", { filePath: slipFile, printer: selectedPrinter, options: { copies: 1, color: false, duplex: "OneSided", paper_size: "A4" } });
       }
 
-      await invoke("print_file", { filePath: file, printer: selectedPrinter, options });
+      await printWithRetry(file, selectedPrinter, options, maxRetries);
       badge.textContent = "Terminé";
       badge.className = "ml-4 text-xs font-semibold text-green-500 status-badge";
       logPrint("Succès", file, selectedPrinter);
       successPaths.push(file);
+
+      // Si Hot Folder actif, déplacer le fichier vers "Imprimé/"
+      if (hotFolderActive && currentHotFolderPath) {
+        try {
+          const printedDir = currentHotFolderPath + "\\Imprimé";
+          await invoke("move_file", { source: file, destFolder: printedDir });
+        } catch (moveErr) {
+          console.warn("Impossible de déplacer le fichier après impression:", moveErr);
+        }
+      }
     } catch (error) {
-      badge.textContent = "Erreur";
+      badge.textContent = maxRetries > 0 ? `Erreur (${maxRetries + 1} essais)` : "Erreur";
       badge.className = "ml-4 text-xs font-semibold text-red-500 status-badge";
       logPrint(`Erreur: ${error}`, file, selectedPrinter);
       errorCount++;
+
+      // Si Hot Folder actif, déplacer vers "Erreurs/"
+      if (hotFolderActive && currentHotFolderPath) {
+        try {
+          const errorsDir = currentHotFolderPath + "\\Erreurs";
+          await invoke("move_file", { source: file, destFolder: errorsDir });
+        } catch (moveErr) {
+          console.warn("Impossible de déplacer le fichier en erreur:", moveErr);
+        }
+      }
     }
 
     showProgress(i + 1, filesToPrint.length);
@@ -408,6 +549,11 @@ async function executePrintProcess() {
 
   if (!printCancelled) {
     statusMessage.textContent = "Impression par lots terminée !";
+    // Notification de fin
+    await notify(
+      "TauriPrint — Impression terminée",
+      `${successPaths.length} fichier(s) imprimé(s) avec succès.${errorCount > 0 ? ` ${errorCount} erreur(s).` : ""}`
+    );
   }
   printBtn.disabled = false;
   cancelBtn.classList.add("hidden");
@@ -442,6 +588,7 @@ async function startPrinting() {
     const delay = scheduledTime.getTime() - now.getTime();
     statusMessage.textContent = `Impression planifiée à ${optSchedule.value} (${Math.round(delay/60000)} min restantes).`;
     printBtn.disabled = true;
+    await notify("TauriPrint", `Impression planifiée à ${optSchedule.value}.`);
     setTimeout(() => {
       executePrintProcess();
     }, delay);
@@ -450,7 +597,120 @@ async function startPrinting() {
   }
 }
 
-// ==== ANNULATION ====
+// ============================================================
+// NOUVEAU — HOT FOLDER
+// ============================================================
+
+hotFolderSelectBtn.addEventListener("click", async () => {
+  try {
+    const folderPath: string = await invoke("select_folder_dialog");
+    if (folderPath) {
+      statusMessage.textContent = "Démarrage de la surveillance...";
+      const result: string = await invoke("start_hot_folder", { folderPath });
+      
+      currentHotFolderPath = folderPath;
+      hotFolderActive = true;
+      
+      // Mettre à jour l'UI
+      hotFolderPath.textContent = folderPath;
+      hotFolderPath.title = folderPath;
+      hotFolderStatus.classList.remove("hidden");
+      hotFolderSelectBtn.classList.add("hidden");
+      hotFolderStopBtn.classList.remove("hidden");
+      
+      statusMessage.textContent = result;
+      await notify("TauriPrint — Hot Folder", `Surveillance démarrée sur : ${folderPath}`);
+    }
+  } catch (err) {
+    statusMessage.textContent = `Erreur Hot Folder: ${err}`;
+    console.error("Hot folder error:", err);
+  }
+});
+
+hotFolderStopBtn.addEventListener("click", async () => {
+  try {
+    const result: string = await invoke("stop_hot_folder");
+    
+    hotFolderActive = false;
+    currentHotFolderPath = "";
+    
+    // Mettre à jour l'UI
+    hotFolderPath.textContent = "Aucun dossier surveillé";
+    hotFolderPath.title = "Aucun dossier surveillé";
+    hotFolderStatus.classList.add("hidden");
+    hotFolderSelectBtn.classList.remove("hidden");
+    hotFolderStopBtn.classList.add("hidden");
+    
+    statusMessage.textContent = result;
+  } catch (err) {
+    statusMessage.textContent = `Erreur: ${err}`;
+    console.error("Hot folder stop error:", err);
+  }
+});
+
+// Écouter les fichiers détectés par le Hot Folder
+async function setupHotFolderListener() {
+  await listen("hot-folder-file", async (event) => {
+    const filePath = event.payload as string;
+    
+    // Ignorer les fichiers dans les sous-dossiers "Imprimé" et "Erreurs"
+    if (filePath.includes("\\Imprimé\\") || filePath.includes("\\Erreurs\\")) {
+      return;
+    }
+    
+    addFile(filePath);
+    statusMessage.textContent = `Hot Folder: ${filePath.split(/[/\\]/).pop()} détecté.`;
+    
+    // Auto-impression si une imprimante est sélectionnée
+    const selectedPrinter = printerSelect.value;
+    if (selectedPrinter && hotFolderActive) {
+      const options = getCurrentOptions();
+      const maxRetries = parseInt(optRetry?.value || "0");
+      const fileName = filePath.split(/[/\\]/).pop() || filePath;
+      
+      statusMessage.textContent = `Hot Folder: impression de ${fileName}...`;
+      
+      try {
+        await printWithRetry(filePath, selectedPrinter, options, maxRetries);
+        statusMessage.textContent = `Hot Folder: ${fileName} imprimé avec succès.`;
+        logPrint("Succès (Hot Folder)", filePath, selectedPrinter);
+        
+        // Déplacer vers "Imprimé/"
+        try {
+          const printedDir = currentHotFolderPath + "\\Imprimé";
+          await invoke("move_file", { source: filePath, destFolder: printedDir });
+          // Retirer de la liste car le fichier a été déplacé
+          filesToPrint = filesToPrint.filter(f => f !== filePath);
+          renderFileList();
+        } catch (moveErr) {
+          console.warn("Déplacement post-impression échoué:", moveErr);
+        }
+
+        await notify("TauriPrint — Hot Folder", `${fileName} imprimé avec succès.`);
+      } catch (error) {
+        statusMessage.textContent = `Hot Folder: erreur sur ${fileName}.`;
+        logPrint(`Erreur (Hot Folder): ${error}`, filePath, selectedPrinter);
+        
+        // Déplacer vers "Erreurs/"
+        try {
+          const errorsDir = currentHotFolderPath + "\\Erreurs";
+          await invoke("move_file", { source: filePath, destFolder: errorsDir });
+          filesToPrint = filesToPrint.filter(f => f !== filePath);
+          renderFileList();
+        } catch (moveErr) {
+          console.warn("Déplacement vers erreurs échoué:", moveErr);
+        }
+
+        await notify("TauriPrint — Erreur Hot Folder", `Échec impression: ${fileName}`);
+      }
+    }
+  });
+}
+
+// ============================================================
+// ANNULATION
+// ============================================================
+
 cancelBtn.addEventListener("click", () => {
   printCancelled = true;
   cancelBtn.disabled = true;
@@ -463,7 +723,10 @@ cancelBtn.addEventListener("click", () => {
   }, 2000);
 });
 
-// ==== THEME ====
+// ============================================================
+// THEME
+// ============================================================
+
 function toggleDarkMode() {
   const html = document.documentElement;
   html.classList.toggle("dark");
@@ -486,11 +749,27 @@ function initTheme() {
   }
 }
 
-// ==== INIT ====
+// ============================================================
+// INIT
+// ============================================================
+
+async function loadAppVersion() {
+  try {
+    const version: string = await invoke("get_app_version");
+    if (appVersionSpan) {
+      appVersionSpan.textContent = `v${version}`;
+    }
+  } catch (err) {
+    console.error("Erreur de récupération de la version:", err);
+  }
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   initTheme();
   loadPrinters();
   setupTauriDragDrop();
+  setupHotFolderListener();
+  loadAppVersion();
 });
 
 sortBtn.addEventListener("click", sortFilesAlphabetically);
@@ -546,7 +825,10 @@ if (updateBtn) {
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
 
-// ==== MODAL EVENTS ====
+// ============================================================
+// MODAL EVENTS
+// ============================================================
+
 function closeModal() {
   printModal.classList.add("opacity-0");
   printModalContent.classList.add("scale-95");

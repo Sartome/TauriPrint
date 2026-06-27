@@ -1,6 +1,6 @@
 [package]
 name = "rustprinter"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -24,7 +24,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 walkdir = "2.5.0"
 lopdf = "0.42.0"
+notify = { version = "8", features = ["macos_kqueue"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+tauri-plugin-notification = "2"
 
