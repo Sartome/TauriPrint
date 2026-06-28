@@ -24,7 +24,7 @@ struct HotFolderState(Mutex<Option<notify::RecommendedWatcher>>);
 // Structures de données
 // ============================================================
 
-#[derive(Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct PrintOptions {
     copies: u32,
     color: bool,
@@ -37,8 +37,34 @@ pub struct PrintOptions {
     page_filter: String,      // "all", "even", "odd"
     #[serde(default)]
     scale: String,            // "fit", "shrink", "noscale"
-    #[serde(default)]
-    _reverse: bool,            // Impression en ordre inversé
+}
+
+
+use serde::Serialize;
+use printpdf::*;
+use std::io::BufWriter;
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct AnalyticsData {
+    pub total_pages_printed: u32,
+    pub success_count: u32,
+    pub error_count: u32,
+    pub printers_used: std::collections::HashMap<String, u32>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct QueueItem {
+    pub id: String,
+    pub file_path: String,
+    pub printer: String,
+    pub options: Option<PrintOptions>,
+    pub status: String, // "pending", "printing", "completed", "error"
+}
+
+pub struct PrintQueueState {
+    pub queue: Mutex<Vec<QueueItem>>,
+    pub is_paused: Mutex<bool>,
+    pub is_running: Mutex<bool>,
 }
 
 // ============================================================
@@ -46,6 +72,43 @@ pub struct PrintOptions {
 // ============================================================
 
 /// Résout le chemin de SumatraPDF embarqué dans les ressources de l'application.
+
+fn get_analytics_path(app: &tauri::AppHandle) -> std::path::PathBuf {
+    let mut path = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    if !path.exists() {
+        let _ = fs::create_dir_all(&path);
+    }
+    path.push("analytics.json");
+    path
+}
+
+#[tauri::command]
+fn get_analytics(app: tauri::AppHandle) -> Result<AnalyticsData, String> {
+    let path = get_analytics_path(&app);
+    if path.exists() {
+        let content = fs::read_to_string(&path).unwrap_or_default();
+        if let Ok(data) = serde_json::from_str(&content) {
+            return Ok(data);
+        }
+    }
+    Ok(AnalyticsData::default())
+}
+
+fn update_analytics(app: &tauri::AppHandle, success: bool, pages: u32, printer: String) {
+    let mut data = get_analytics(app.clone()).unwrap_or_default();
+    if success {
+        data.success_count += 1;
+        data.total_pages_printed += pages;
+        *data.printers_used.entry(printer).or_insert(0) += 1;
+    } else {
+        data.error_count += 1;
+    }
+    let path = get_analytics_path(app);
+    if let Ok(json) = serde_json::to_string_pretty(&data) {
+        let _ = fs::write(path, json);
+    }
+}
+
 fn get_sumatra_path(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     // En mode dev, SumatraPDF est dans src-tauri/resources/
     let resource_dir = app_handle
@@ -72,6 +135,39 @@ fn get_sumatra_path(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf,
 // ============================================================
 // Commandes Tauri — Impression
 // ============================================================
+
+
+fn convert_image_to_pdf(image_path: &str) -> Result<String, String> {
+    let temp_dir = std::env::temp_dir();
+    let file_name = std::path::Path::new(image_path).file_stem().unwrap_or_default().to_string_lossy();
+    let output_path = temp_dir.join(format!("{}_converted.pdf", file_name));
+    
+    let img = ::image::open(image_path).map_err(|e| format!("Erreur lecture image: {}", e))?;
+    use ::image::GenericImageView;
+    let (width, height) = img.dimensions();
+    
+    let dpi = 300.0;
+    let w_mm = (width as f64) * 25.4 / dpi;
+    let h_mm = (height as f64) * 25.4 / dpi;
+    
+    let (doc, page1, layer1) = PdfDocument::new("Converted Image", Mm(w_mm), Mm(h_mm), "Layer 1");
+    let current_layer = doc.get_page(page1).get_layer(layer1);
+    
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut bytes);
+    img.write_to(&mut cursor, ::image::ImageFormat::Jpeg).map_err(|e| e.to_string())?;
+    
+    let decoder = printpdf::image_crate::codecs::jpeg::JpegDecoder::new(std::io::Cursor::new(&bytes)).map_err(|e| e.to_string())?;
+    let pdf_image = printpdf::Image::try_from(decoder).map_err(|e| e.to_string())?;
+    
+    pdf_image.add_to_layer(current_layer.clone(), ImageTransform::default());
+    
+    let file = std::fs::File::create(&output_path).map_err(|e| e.to_string())?;
+    let mut buf_writer = BufWriter::new(file);
+    doc.save(&mut buf_writer).map_err(|e| e.to_string())?;
+    
+    Ok(output_path.to_string_lossy().into_owned())
+}
 
 #[tauri::command]
 fn get_printers() -> Result<Vec<String>, String> {
@@ -121,33 +217,97 @@ fn get_printers() -> Result<Vec<String>, String> {
     }
 }
 
-#[tauri::command]
-fn open_file_dialog() -> Result<Vec<String>, String> {
-    let script = r#"
-        Add-Type -AssemblyName System.Windows.Forms
-        $dialog = New-Object System.Windows.Forms.OpenFileDialog
-        $dialog.Multiselect = $true
-        $dialog.Filter = "Tous les fichiers (*.*)|*.*|Fichiers PDF (*.pdf)|*.pdf|Images|*.png;*.jpg;*.jpeg"
-        $dialog.Title = "Sélectionnez les fichiers à imprimer"
-        if ($dialog.ShowDialog() -eq 'OK') {
-            $dialog.FileNames -join "|"
-        }
-    "#;
-    let mut cmd = Command::new("powershell");
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000);
-    let output = cmd
-        .args(&["-Sta", "-Command", script])
-        .output()
-        .map_err(|e| e.to_string())?;
 
-    let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if result.is_empty() {
-        return Ok(Vec::new());
+
+fn print_file_internal(
+    app_handle: &tauri::AppHandle,
+    file_path: &str,
+    printer: &str,
+    options: Option<&PrintOptions>,
+) -> Result<String, String> {
+    if file_path.is_empty() {
+        return Err("Le chemin du fichier est invalide.".to_string());
+    }
+    let copies = options.map(|o| o.copies).unwrap_or(1).max(1);
+    
+    let mut actual_path = file_path.to_string();
+    if !actual_path.to_lowercase().ends_with(".pdf") {
+        actual_path = convert_image_to_pdf(&actual_path)?;
     }
 
-    let paths: Vec<String> = result.split('|').map(|s| s.to_string()).collect();
-    Ok(paths)
+    #[cfg(target_os = "windows")]
+    {
+        let sumatra = get_sumatra_path(app_handle)?;
+        let mut settings_parts: Vec<String> = Vec::new();
+
+        let page_range = options.map(|o| o.page_range.as_str()).unwrap_or("");
+        if !page_range.is_empty() { settings_parts.push(page_range.to_string()); }
+
+        let page_filter = options.map(|o| o.page_filter.as_str()).unwrap_or("all");
+        match page_filter {
+            "even" => settings_parts.push("even".to_string()),
+            "odd" => settings_parts.push("odd".to_string()),
+            _ => {}
+        }
+
+        let color = options.map(|o| o.color).unwrap_or(true);
+        settings_parts.push(if color { "color".to_string() } else { "monochrome".to_string() });
+
+        let duplex = options.map(|o| o.duplex.as_str()).unwrap_or("OneSided");
+        match duplex {
+            "TwoSidedLongEdge" => settings_parts.push("duplexlong".to_string()),
+            "TwoSidedShortEdge" => settings_parts.push("duplexshort".to_string()),
+            _ => settings_parts.push("simplex".to_string()),
+        }
+
+        let scale = options.map(|o| o.scale.as_str()).unwrap_or("fit");
+        match scale {
+            "noscale" => settings_parts.push("noscale".to_string()),
+            "shrink" => settings_parts.push("shrink".to_string()),
+            _ => settings_parts.push("fit".to_string()),
+        }
+
+        let paper = options.map(|o| o.paper_size.as_str()).unwrap_or("A4");
+        settings_parts.push(format!("paper={}", paper));
+
+        if copies > 1 {
+            settings_parts.push(format!("{}x", copies));
+        }
+
+        let settings_str = settings_parts.join(",");
+
+        let mut cmd = Command::new(&sumatra);
+        cmd.creation_flags(0x08000000);
+        cmd.args([
+            "-print-to",
+            printer,
+            "-print-settings",
+            &settings_str,
+            "-silent",
+            &actual_path,
+        ]);
+
+        let output = cmd.output().map_err(|e| format!("Échec SumatraPDF: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if !stderr.is_empty() {
+                return Err(format!("Erreur SumatraPDF: {}", stderr));
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("lp")
+            .args(["-d", printer, "-n", &copies.to_string(), &actual_path])
+            .output()
+            .map_err(|e| format!("Échec lp: {}", e))?;
+        if !output.status.success() {
+            return Err(format!("Erreur CUPS: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+    }
+
+    Ok(format!("Le fichier {} a été expédié au spooler ({} copies).", file_path, copies))
 }
 
 #[tauri::command]
@@ -157,179 +317,98 @@ fn print_file(
     printer: String,
     options: Option<PrintOptions>,
 ) -> Result<String, String> {
-    if file_path.is_empty() {
-        return Err("Le chemin du fichier est invalide.".to_string());
-    }
-    let copies = options.as_ref().map(|o| o.copies).unwrap_or(1).max(1);
-    let is_pdf = file_path.to_lowercase().ends_with(".pdf");
+    print_file_internal(&app_handle, &file_path, &printer, options.as_ref())
+}
 
-    #[cfg(target_os = "windows")]
+
+
+#[tauri::command]
+fn start_queue(app: tauri::AppHandle, state: State<PrintQueueState>, items: Vec<QueueItem>) -> Result<(), String> {
     {
-        if is_pdf {
-            // === MOTEUR SUMATRAPDF (pour les PDF) ===
-            let sumatra = get_sumatra_path(&app_handle)?;
-
-            // Construire les print-settings
-            let mut settings_parts: Vec<String> = Vec::new();
-
-            // Plage de pages
-            let page_range = options.as_ref().map(|o| o.page_range.as_str()).unwrap_or("");
-            if !page_range.is_empty() {
-                settings_parts.push(page_range.to_string());
+        let mut q = state.queue.lock().unwrap();
+        *q = items;
+        *state.is_paused.lock().unwrap() = false;
+    }
+    
+    let app_clone = app.clone();
+    std::thread::spawn(move || {
+        let state = app_clone.state::<PrintQueueState>();
+        *state.is_running.lock().unwrap() = true;
+        
+        loop {
+            while *state.is_paused.lock().unwrap() {
+                std::thread::sleep(std::time::Duration::from_millis(500));
             }
-
-            // Pages paires / impaires
-            let page_filter = options.as_ref().map(|o| o.page_filter.as_str()).unwrap_or("all");
-            match page_filter {
-                "even" => settings_parts.push("even".to_string()),
-                "odd" => settings_parts.push("odd".to_string()),
-                _ => {}
-            }
-
-            // Couleur / N&B
-            let color = options.as_ref().map(|o| o.color).unwrap_or(true);
-            settings_parts.push(if color { "color".to_string() } else { "monochrome".to_string() });
-
-            // Recto-verso
-            let duplex = options.as_ref().map(|o| o.duplex.as_str()).unwrap_or("OneSided");
-            match duplex {
-                "TwoSidedLongEdge" => settings_parts.push("duplexlong".to_string()),
-                "TwoSidedShortEdge" => settings_parts.push("duplexshort".to_string()),
-                _ => settings_parts.push("simplex".to_string()),
-            }
-
-            // Mise à l'échelle
-            let scale = options.as_ref().map(|o| o.scale.as_str()).unwrap_or("fit");
-            match scale {
-                "noscale" => settings_parts.push("noscale".to_string()),
-                "shrink" => settings_parts.push("shrink".to_string()),
-                _ => settings_parts.push("fit".to_string()),
-            }
-
-            // Taille du papier
-            let paper = options.as_ref().map(|o| o.paper_size.as_str()).unwrap_or("A4");
-            settings_parts.push(format!("paper={}", paper));
-
-            // Nombre de copies
-            if copies > 1 {
-                settings_parts.push(format!("{}x", copies));
-            }
-
-            let settings_str = settings_parts.join(",");
-
-            let mut cmd = Command::new(&sumatra);
-            cmd.creation_flags(0x08000000);
-            cmd.args([
-                "-print-to",
-                &printer,
-                "-print-settings",
-                &settings_str,
-                "-silent",
-                &file_path,
-            ]);
-
-            let output = cmd.output().map_err(|e| format!("Échec SumatraPDF: {}", e))?;
-
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if !stderr.is_empty() {
-                    return Err(format!("Erreur SumatraPDF: {}", stderr));
+            
+            let mut next_idx = None;
+            {
+                let q = state.queue.lock().unwrap();
+                for (i, item) in q.iter().enumerate() {
+                    if item.status == "pending" {
+                        next_idx = Some(i);
+                        break;
+                    }
                 }
             }
-        } else {
-            // === FALLBACK POWERSHELL (pour les fichiers non-PDF) ===
-            let color_str = options
-                .as_ref()
-                .map(|o| if o.color { "$true" } else { "$false" })
-                .unwrap_or("$true");
-            let duplex_str = options
-                .as_ref()
-                .map(|o| o.duplex.as_str())
-                .unwrap_or("OneSided");
-            let paper_size_str = options
-                .as_ref()
-                .map(|o| o.paper_size.as_str())
-                .unwrap_or("A4");
-
-            let ps_script = format!(
-                r#"
-                $ErrorActionPreference = 'Stop'
-                try {{
-                    $PrinterName = '{}'
-                    $FilePath = '{}'
-                    
-                    $DefaultPrinter = (Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default=$true").Name
-                    $Network = New-Object -ComObject WScript.Network
-                    $Network.SetDefaultPrinter($PrinterName)
-                    
-                    $oldConfig = Get-PrintConfiguration -PrinterName $PrinterName
-                    Set-PrintConfiguration -PrinterName $PrinterName -Color {} -DuplexingMode {} -PaperSize {}
-                    
-                    for ($i = 1; $i -le {}; $i++) {{
-                        $proc = Start-Process -FilePath $FilePath -Verb Print -WindowStyle Hidden -PassThru
-                        if ($null -ne $proc) {{
-                            try {{
-                                $proc | Wait-Process -Timeout 10 -ErrorAction Stop
-                            }} catch {{ }}
-                            if (-not $proc.HasExited) {{
-                                $proc | Stop-Process -Force -ErrorAction SilentlyContinue
-                            }}
-                        }} else {{
-                            Start-Sleep -Seconds 10
-                        }}
-                        Start-Sleep -Seconds 2
-                    }}
-                    
-                    Set-PrintConfiguration -PrinterName $PrinterName -Color $oldConfig.Color -DuplexingMode $oldConfig.DuplexingMode -PaperSize $oldConfig.PaperSize
-                    
-                    if ($DefaultPrinter) {{ $Network.SetDefaultPrinter($DefaultPrinter) }}
-                }} catch {{
-                    Write-Error $_.Exception.Message
-                    exit 1
-                }}
-                "#,
-                printer.replace("'", "''"),
-                file_path.replace("'", "''"),
-                color_str,
-                duplex_str,
-                paper_size_str,
-                copies
-            );
-
-            let mut cmd = Command::new("powershell");
-            cmd.creation_flags(0x08000000);
-            let output = cmd
-                .args(["-Command", &ps_script])
-                .output()
-                .map_err(|e| format!("Échec PowerShell: {}", e))?;
-
-            if !output.status.success() {
-                return Err(format!(
-                    "Erreur d'impression: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ));
+            
+            if let Some(idx) = next_idx {
+                let item = {
+                    let mut q = state.queue.lock().unwrap();
+                    q[idx].status = "printing".to_string();
+                    let _ = app_clone.emit("queue-progress", q.clone());
+                    q[idx].clone()
+                };
+                
+                let res = print_file_internal(&app_clone, &item.file_path, &item.printer, item.options.as_ref());
+                
+                {
+                    let mut q = state.queue.lock().unwrap();
+                    if res.is_ok() {
+                        q[idx].status = "completed".to_string();
+                        update_analytics(&app_clone, true, 1, item.printer.clone());
+                    } else {
+                        q[idx].status = "error".to_string();
+                        update_analytics(&app_clone, false, 0, item.printer.clone());
+                    }
+                    let _ = app_clone.emit("queue-progress", q.clone());
+                }
+            } else {
+                break;
             }
         }
-    }
+        *state.is_running.lock().unwrap() = false;
+        let _ = app_clone.emit("queue-finished", ());
+    });
+    Ok(())
+}
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let output = Command::new("lp")
-            .args(["-d", &printer, "-n", &copies.to_string(), &file_path])
-            .output()
-            .map_err(|e| format!("Échec lp: {}", e))?;
-        if !output.status.success() {
-            return Err(format!(
-                "Erreur CUPS: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-    }
+#[tauri::command]
+fn pause_queue(state: State<PrintQueueState>) {
+    *state.is_paused.lock().unwrap() = true;
+}
 
-    Ok(format!(
-        "Le fichier {} a été expédié au spooler ({} copies).",
-        file_path, copies
-    ))
+#[tauri::command]
+fn resume_queue(state: State<PrintQueueState>) {
+    *state.is_paused.lock().unwrap() = false;
+}
+
+#[tauri::command]
+fn cancel_queue_item(state: State<PrintQueueState>, index: usize) -> Result<(), String> {
+    let mut q = state.queue.lock().unwrap();
+    if index < q.len() {
+        q.remove(index);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn reorder_queue(state: State<PrintQueueState>, old_index: usize, new_index: usize) -> Result<(), String> {
+    let mut q = state.queue.lock().unwrap();
+    if old_index < q.len() && new_index < q.len() {
+        let item = q.remove(old_index);
+        q.insert(new_index, item);
+    }
+    Ok(())
 }
 
 // ============================================================
@@ -359,7 +438,8 @@ fn process_dropped_paths(paths: Vec<String>) -> Vec<String> {
 #[tauri::command]
 fn generate_slip_sheet(text: String) -> Result<String, String> {
     let temp_dir = std::env::temp_dir();
-    let file_path = temp_dir.join(format!("slip_sheet_{}.txt", text.replace(" ", "_")));
+    let safe_text = text.replace("/", "_").replace("\\", "_").replace(" ", "_").replace("..", "_");
+    let file_path = temp_dir.join(format!("slip_sheet_{}.txt", safe_text));
     let mut file = fs::File::create(&file_path).map_err(|e| e.to_string())?;
 
     let content = format!("\n\n========================================\n\n  PAGE DE GARDE\n  Document : {}\n\n========================================\n", text);
@@ -369,17 +449,7 @@ fn generate_slip_sheet(text: String) -> Result<String, String> {
     Ok(file_path.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
-fn export_logs(logs: Vec<String>, dest_path: String) -> Result<String, String> {
-    let mut file = fs::File::create(&dest_path).map_err(|e| e.to_string())?;
-    file.write_all(b"Date,Statut,Fichier,Imprimante\n")
-        .map_err(|e| e.to_string())?;
-    for log in logs {
-        file.write_all(format!("{}\n", log).as_bytes())
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(format!("Logs exportés vers {}", dest_path))
-}
+
 
 #[tauri::command]
 fn check_print_jobs(printer: String) -> Result<u32, String> {
@@ -417,6 +487,20 @@ fn get_pdf_page_count(file_path: String) -> Result<u32, String> {
     let doc = lopdf::Document::load(&file_path)
         .map_err(|e| format!("Impossible de lire le PDF: {}", e))?;
     Ok(doc.get_pages().len() as u32)
+}
+
+/// Retourne le nombre de pages de plusieurs fichiers PDF en un seul appel (optimisation).
+#[tauri::command]
+fn get_pdf_page_counts(file_paths: Vec<String>) -> Result<std::collections::HashMap<String, u32>, String> {
+    let mut counts = std::collections::HashMap::new();
+    for path in file_paths {
+        if path.to_lowercase().ends_with(".pdf") {
+            if let Ok(doc) = lopdf::Document::load(&path) {
+                counts.insert(path, doc.get_pages().len() as u32);
+            }
+        }
+    }
+    Ok(counts)
 }
 
 // ============================================================
@@ -654,15 +738,25 @@ fn stop_hot_folder(state: State<HotFolderState>) -> Result<String, String> {
 /// Déplace un fichier vers un dossier de destination.
 /// Utilisé pour déplacer les fichiers imprimés vers "Imprimé/" ou "Erreurs/".
 #[tauri::command]
-fn move_file(source: String, dest_folder: String) -> Result<String, String> {
+fn move_file(state: State<HotFolderState>, source: String, is_error: bool) -> Result<String, String> {
+    let hot_folder_opt = state.0.lock().map_err(|e| e.to_string())?;
+    if hot_folder_opt.is_none() {
+        return Err("Aucun Hot Folder actuellement surveillé.".to_string());
+    }
+    
     let src = Path::new(&source);
     if !src.exists() {
         return Err(format!("Le fichier source '{}' n'existe pas.", source));
     }
 
-    let dest_dir = Path::new(&dest_folder);
+    // Le dest_folder est déduit de la source, qui DOIT se trouver dans le dossier surveillé
+    let parent_dir = src.parent().ok_or_else(|| "Fichier sans dossier parent.".to_string())?;
+    
+    let sub_folder = if is_error { "Erreurs" } else { "Imprimé" };
+    let dest_dir = parent_dir.join(sub_folder);
+    
     if !dest_dir.exists() {
-        fs::create_dir_all(dest_dir)
+        fs::create_dir_all(&dest_dir)
             .map_err(|e| format!("Impossible de créer le dossier destination: {}", e))?;
     }
 
@@ -671,20 +765,10 @@ fn move_file(source: String, dest_folder: String) -> Result<String, String> {
         .ok_or_else(|| "Nom de fichier invalide.".to_string())?;
     let dest_path = dest_dir.join(file_name);
 
-    // Si un fichier du même nom existe, ajouter un suffixe
     let final_dest = if dest_path.exists() {
-        let stem = dest_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("file");
-        let ext = dest_path
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let stem = dest_path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+        let ext = dest_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
         if ext.is_empty() {
             dest_dir.join(format!("{}_{}", stem, timestamp))
         } else {
@@ -694,46 +778,16 @@ fn move_file(source: String, dest_folder: String) -> Result<String, String> {
         dest_path
     };
 
-    fs::rename(src, &final_dest).map_err(|e| {
-        // Si rename échoue (cross-device), essayer copy + delete
-        match fs::copy(src, &final_dest) {
-            Ok(_) => {
-                let _ = fs::remove_file(src);
-                return format!("");
-            }
-            Err(_) => format!("Impossible de déplacer le fichier: {}", e),
-        }
-    })?;
+    if let Err(e) = fs::rename(src, &final_dest) {
+        fs::copy(src, &final_dest).map_err(|copy_err| {
+            format!("Impossible de déplacer le fichier: rename_err={}, copy_err={}", e, copy_err)
+        })?;
+        let _ = fs::remove_file(src);
+    }
 
     Ok(final_dest.to_string_lossy().into_owned())
 }
 
-/// Ouvre un dialogue de sélection de dossier (pour le Hot Folder).
-#[tauri::command]
-fn select_folder_dialog() -> Result<String, String> {
-    let script = r#"
-        Add-Type -AssemblyName System.Windows.Forms
-        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-        $dialog.Description = "Sélectionnez le dossier à surveiller (Hot Folder)"
-        $dialog.ShowNewFolderButton = $true
-        if ($dialog.ShowDialog() -eq 'OK') {
-            $dialog.SelectedPath
-        }
-    "#;
-    let mut cmd = Command::new("powershell");
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000);
-    let output = cmd
-        .args(&["-Sta", "-Command", script])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if result.is_empty() {
-        return Err("Aucun dossier sélectionné.".to_string());
-    }
-    Ok(result)
-}
 
 /// Retourne la version actuelle de l'application définie dans tauri.conf.json.
 #[tauri::command]
@@ -749,25 +803,32 @@ fn get_app_version(app_handle: tauri::AppHandle) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(HotFolderState(Mutex::new(None)))
+        .manage(PrintQueueState { queue: Mutex::new(Vec::new()), is_paused: Mutex::new(false), is_running: Mutex::new(false) })
         .invoke_handler(tauri::generate_handler![
             get_printers,
             print_file,
             process_dropped_paths,
             generate_slip_sheet,
-            export_logs,
             check_print_jobs,
             merge_pdfs,
-            open_file_dialog,
             get_pdf_page_count,
+            get_pdf_page_counts,
             // Nouvelles commandes Phase 1
             start_hot_folder,
             stop_hot_folder,
             move_file,
-            select_folder_dialog,
-            get_app_version
+            get_app_version,
+            get_analytics,
+            start_queue,
+            pause_queue,
+            resume_queue,
+            cancel_queue_item,
+            reorder_queue
         ])
         .run(tauri::generate_context!())
         .expect("Erreur fatale lors du lancement de l'application Tauri");

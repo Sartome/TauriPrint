@@ -1,7 +1,7 @@
 {
   "name": "tauriprint",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "predev": "node sync-version.js",
@@ -13,12 +13,19 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
+    "@tauri-apps/plugin-notification": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-updater": "^2.10.1",
-    "@tauri-apps/plugin-notification": "^2"
+    "chart.js": "^4.5.1",
+    "pdfjs-dist": "^6.1.200"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "autoprefixer": "^10.5.2",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.19",
     "typescript": "~5.6.2",
     "vite": "^6.0.3"
   },

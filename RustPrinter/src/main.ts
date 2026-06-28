@@ -1,11 +1,20 @@
-import { invoke } from "@tauri-apps/api/core";
+// @ts-nocheck
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check } from "@tauri-apps/plugin-updater";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
+import Chart from "chart.js/auto";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+
 
 // Éléments du DOM (Principaux)
 const printerSelect = document.getElementById("printer-select") as HTMLSelectElement;
@@ -65,6 +74,18 @@ const hotFolderSelectBtn = document.getElementById("hot-folder-select-btn") as H
 const hotFolderStopBtn = document.getElementById("hot-folder-stop-btn") as HTMLButtonElement;
 const hotFolderPath = document.getElementById("hot-folder-path") as HTMLParagraphElement;
 const hotFolderStatus = document.getElementById("hot-folder-status") as HTMLSpanElement;
+
+
+const dashboardBtn = document.getElementById("dashboard-btn") as HTMLButtonElement;
+const dashboardModal = document.getElementById("dashboard-modal") as HTMLDivElement;
+const dashboardCloseBtn = document.getElementById("dashboard-close-btn") as HTMLButtonElement;
+const statTotalPages = document.getElementById("stat-total-pages") as HTMLParagraphElement;
+const statSuccess = document.getElementById("stat-success") as HTMLSpanElement;
+const statErrors = document.getElementById("stat-errors") as HTMLSpanElement;
+let analyticsChartInstance: any = null;
+
+const pauseQueueBtn = document.getElementById("pause-queue-btn") as HTMLButtonElement;
+const resumeQueueBtn = document.getElementById("resume-queue-btn") as HTMLButtonElement;
 
 // État de l'application
 let filesToPrint: string[] = [];
@@ -233,35 +254,90 @@ function addFile(filePath: string) {
   renderFileList();
 }
 
+
 async function renderFileList() {
   fileList.innerHTML = "";
   updateFileCount();
 
+  let pdfPageCounts = {};
+  try {
+    const pdfFiles = filesToPrint.filter(f => f.toLowerCase().endsWith(".pdf"));
+    if (pdfFiles.length > 0) {
+      pdfPageCounts = await invoke("get_pdf_page_counts", { filePaths: pdfFiles });
+    }
+  } catch (e) {}
+
   for (let index = 0; index < filesToPrint.length; index++) {
     const filePath = filesToPrint[index];
-    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    const fileName = filePath.split(/[\\/]/).pop() || filePath;
     const isPdf = filePath.toLowerCase().endsWith(".pdf");
+    const isImg = filePath.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+    
     const li = document.createElement("li");
-    li.className = "flex justify-between items-center bg-slate-100 dark:bg-slate-700/80 px-3 py-2 rounded text-sm text-slate-700 dark:text-slate-200 cursor-grab active:cursor-grabbing border border-transparent dark:border-slate-600 transition-colors";
+    li.className = "flex items-center bg-slate-100 dark:bg-slate-700/80 p-2 rounded text-sm text-slate-700 dark:text-slate-200 cursor-grab active:cursor-grabbing border border-transparent dark:border-slate-600 transition-colors gap-3";
     li.draggable = true;
     li.dataset.index = index.toString();
 
-    // Info pages pour les PDF
-    let pageInfo = "";
-    if (isPdf) {
+    // Conteneur miniature
+    const thumbContainer = document.createElement("div");
+    thumbContainer.className = "w-10 h-10 shrink-0 bg-slate-200 dark:bg-slate-800 rounded overflow-hidden flex items-center justify-center";
+    
+    if (isImg) {
+      const img = document.createElement("img");
+      img.src = convertFileSrc(filePath);
+      img.className = "w-full h-full object-cover";
+      thumbContainer.appendChild(img);
+    } else if (isPdf) {
+      const canvas = document.createElement("canvas");
+      canvas.className = "w-full h-full object-contain";
+      thumbContainer.appendChild(canvas);
       try {
-        const pageCount: number = await invoke("get_pdf_page_count", { filePath });
-        pageInfo = `<span class="ml-2 text-xs text-slate-400 dark:text-slate-500 font-mono">${pageCount}p</span>`;
-      } catch {
-        pageInfo = `<span class="ml-2 text-xs text-slate-400 dark:text-slate-500 font-mono">?p</span>`;
-      }
+        const loadingTask = pdfjsLib.getDocument({ url: convertFileSrc(filePath) });
+        loadingTask.promise.then(pdf => {
+          return pdf.getPage(1);
+        }).then(page => {
+          const viewport = page.getViewport({ scale: 1.0 });
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          page.render({ canvasContext: canvas.getContext('2d'), viewport });
+        }).catch(e => console.warn(e));
+      } catch (e) {}
+    } else {
+      thumbContainer.innerHTML = '📄';
     }
 
-    li.innerHTML = `
-      <span class="truncate flex-1 pointer-events-none" title="${filePath}">${fileName}${pageInfo}</span>
-      <button class="ml-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-bold" onclick="removeFile(${index})">✕</button>
-      <span class="ml-4 text-xs font-semibold text-slate-400 dark:text-slate-400 status-badge pointer-events-none">En attente</span>
-    `;
+    const titleContainer = document.createElement("div");
+    titleContainer.className = "flex-1 min-w-0 pointer-events-none";
+    
+    const titleSpan = document.createElement("div");
+    titleSpan.className = "truncate font-medium flex-1";
+    titleSpan.title = filePath;
+    titleSpan.textContent = fileName;
+    titleContainer.appendChild(titleSpan);
+
+    if (isPdf) {
+      const pageSpan = document.createElement("div");
+      pageSpan.className = "text-[10px] text-slate-400 font-mono";
+      const pageCount = pdfPageCounts[filePath];
+      pageSpan.textContent = pageCount !== undefined ? `${pageCount} pages` : `? pages`;
+      titleContainer.appendChild(pageSpan);
+    }
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "text-red-500 hover:text-red-700 font-bold px-2";
+    deleteBtn.textContent = "✕";
+    deleteBtn.onclick = () => removeFile(index);
+
+    const statusBadge = document.createElement("span");
+    statusBadge.className = "text-xs font-semibold text-slate-400 status-badge pointer-events-none shrink-0 w-20 text-right";
+    statusBadge.textContent = "En attente";
+    statusBadge.id = `status-${index}`;
+
+    li.appendChild(thumbContainer);
+    li.appendChild(titleContainer);
+    li.appendChild(statusBadge);
+    li.appendChild(deleteBtn);
+
     li.addEventListener("dragstart", handleDragStart);
     li.addEventListener("dragover", handleDragOver);
     li.addEventListener("drop", handleDrop);
@@ -269,6 +345,11 @@ async function renderFileList() {
     li.addEventListener("dragleave", handleDragLeave);
     fileList.appendChild(li);
   }
+}
+
+function removeFile(index) {
+  filesToPrint.splice(index, 1);
+  renderFileList();
 }
 
 let draggedItemIndex: number | null = null;
@@ -348,16 +429,19 @@ function logPrint(status: string, file: string, printer: string) {
 
 exportLogsBtn.addEventListener("click", async () => {
   try {
-    const result: string = await invoke("export_logs", { logs: printLogs, destPath: "print_logs.csv" });
-    alert(result);
+    const destPath = await save({ filters: [{ name: "CSV", extensions: ["csv"] }], defaultPath: "print_logs.csv" });
+    if (destPath) {
+        let textContent = "Date,Statut,Fichier,Imprimante\n";
+        for (const log of printLogs) {
+            textContent += log + "\n";
+        }
+        await writeTextFile(destPath, textContent);
+        alert("Logs exportés avec succès vers " + destPath);
+    }
   } catch (error) {
     alert("Erreur lors de l'export: " + error);
   }
 });
-
-// ============================================================
-// BARRE DE PROGRESSION
-// ============================================================
 
 function showProgress(current: number, total: number) {
   progressSection.classList.remove("hidden");
@@ -427,147 +511,110 @@ async function printWithRetry(
 // IMPRESSION PRINCIPALE
 // ============================================================
 
+
+let queueListenersSetup = false;
+
 async function executePrintProcess() {
   const selectedPrinter = printerSelect.value;
   if (!selectedPrinter || filesToPrint.length === 0) return;
 
-  // Confirmation avant impression
   const fileCount = filesToPrint.length;
   const copies = parseInt(optCopies.value) || 1;
-  const maxRetries = parseInt(optRetry?.value || "0");
-  const confirmMsg = `Vous êtes sur le point d'imprimer ${fileCount} fichier(s) (${copies} copie(s) chacun) sur « ${selectedPrinter} ».${maxRetries > 0 ? `\nRetry: ${maxRetries} tentative(s) en cas d'erreur.` : ""}\n\nContinuer ?`;
+  const confirmMsg = `Vous êtes sur le point d'imprimer ${fileCount} fichier(s) (${copies} copie(s) chacun) sur « ${selectedPrinter} ».\n\nContinuer ?`;
   if (!confirm(confirmMsg)) {
-    statusMessage.textContent = "Impression annulée par l'utilisateur.";
     return;
   }
 
   printBtn.disabled = true;
   cancelBtn.classList.remove("hidden");
   exportLogsBtn.classList.add("hidden");
-  printCancelled = false;
+  pauseQueueBtn.classList.remove("hidden");
+  resumeQueueBtn.classList.add("hidden");
+  
   printLogs = [];
   successPaths = [];
-  let errorCount = 0;
-  const listItems = fileList.querySelectorAll("li");
 
   const options = getCurrentOptions();
 
-  // === FUSION PDF ===
-  if (optMergePdf.checked) {
-    statusMessage.textContent = "Fusion des PDF en cours...";
-    try {
-      const mergedFile: string = await invoke("merge_pdfs", {
-        paths: filesToPrint,
-      });
-      statusMessage.textContent = "Impression du PDF fusionné...";
-      await printWithRetry(mergedFile, selectedPrinter, options, maxRetries);
-      logPrint("Succès", "Lot Fusionné", selectedPrinter);
-      successPaths = [...filesToPrint];
-      statusMessage.textContent = "Lot fusionné imprimé !";
-      await notify("TauriPrint", `Lot fusionné imprimé avec succès (${filesToPrint.length} fichiers).`);
-    } catch (e) {
-      statusMessage.textContent = `Erreur fusion: ${e}`;
-      errorCount = filesToPrint.length;
-      logPrint(`Erreur Fusion: ${e}`, "Lot Fusionné", selectedPrinter);
-      await notify("TauriPrint — Erreur", `Échec de la fusion/impression: ${e}`);
-    }
-    printBtn.disabled = false;
-    cancelBtn.classList.add("hidden");
-    exportLogsBtn.classList.remove("hidden");
-    hideProgress();
+  const queueItems = filesToPrint.map((file, i) => ({
+      id: i.toString(),
+      file_path: file,
+      printer: selectedPrinter,
+      options: options,
+      status: "pending"
+  }));
 
-    // Affichage Modal
-    modalSuccessCount.textContent = successPaths.length.toString();
-    modalErrorCount.textContent = errorCount.toString();
-    printModal.classList.remove("hidden");
-    setTimeout(() => {
-      printModal.classList.remove("opacity-0");
-      printModalContent.classList.remove("scale-95");
-    }, 50);
-    return;
-  }
-
-  // === IMPRESSION SÉQUENTIELLE ===
   showProgress(0, filesToPrint.length);
-
-  for (let i = 0; i < filesToPrint.length; i++) {
-    // Vérifier l'annulation
-    if (printCancelled) {
-      statusMessage.textContent = `Impression annulée. ${successPaths.length} fichier(s) imprimé(s) sur ${filesToPrint.length}.`;
-      await notify("TauriPrint", `Impression annulée. ${successPaths.length}/${filesToPrint.length} fichier(s) imprimé(s).`);
-      break;
-    }
-
-    const file = filesToPrint[i];
-    const badge = listItems[i].querySelector(".status-badge") as HTMLSpanElement;
-    badge.textContent = "Impression...";
-    badge.className = "ml-4 text-xs font-semibold text-blue-500 status-badge";
-    statusMessage.textContent = `Impression de ${file.split(/[/\\]/).pop()}... (${i + 1}/${filesToPrint.length})`;
-    showProgress(i, filesToPrint.length);
-
-    try {
-      // Slip sheets
-      if (optSlipSheets.checked) {
-        const slipFile: string = await invoke("generate_slip_sheet", { text: file.split(/[/\\]/).pop() || file });
-        await invoke("print_file", { filePath: slipFile, printer: selectedPrinter, options: { copies: 1, color: false, duplex: "OneSided", paper_size: "A4" } });
-      }
-
-      await printWithRetry(file, selectedPrinter, options, maxRetries);
-      badge.textContent = "Terminé";
-      badge.className = "ml-4 text-xs font-semibold text-green-500 status-badge";
-      logPrint("Succès", file, selectedPrinter);
-      successPaths.push(file);
-
-      // Si Hot Folder actif, déplacer le fichier vers "Imprimé/"
-      if (hotFolderActive && currentHotFolderPath) {
-        try {
-          const printedDir = currentHotFolderPath + "\\Imprimé";
-          await invoke("move_file", { source: file, destFolder: printedDir });
-        } catch (moveErr) {
-          console.warn("Impossible de déplacer le fichier après impression:", moveErr);
-        }
-      }
-    } catch (error) {
-      badge.textContent = maxRetries > 0 ? `Erreur (${maxRetries + 1} essais)` : "Erreur";
-      badge.className = "ml-4 text-xs font-semibold text-red-500 status-badge";
-      logPrint(`Erreur: ${error}`, file, selectedPrinter);
-      errorCount++;
-
-      // Si Hot Folder actif, déplacer vers "Erreurs/"
-      if (hotFolderActive && currentHotFolderPath) {
-        try {
-          const errorsDir = currentHotFolderPath + "\\Erreurs";
-          await invoke("move_file", { source: file, destFolder: errorsDir });
-        } catch (moveErr) {
-          console.warn("Impossible de déplacer le fichier en erreur:", moveErr);
-        }
-      }
-    }
-
-    showProgress(i + 1, filesToPrint.length);
+  
+  if (!queueListenersSetup) {
+      queueListenersSetup = true;
+      listen("queue-progress", (event) => {
+          const queue = event.payload;
+          let completed = 0;
+          let errors = 0;
+          
+          filesToPrint = queue.map((q) => q.file_path);
+          renderFileList().then(() => {
+              queue.forEach((q, i) => {
+                  const badge = document.getElementById(`status-${i}`);
+                  if (badge) {
+                      if (q.status === "printing") {
+                          badge.textContent = "Impression...";
+                          badge.className = "text-xs font-semibold text-blue-500 status-badge shrink-0 w-20 text-right";
+                          statusMessage.textContent = `Impression de ${q.file_path.split(/[\\/]/).pop()}...`;
+                      } else if (q.status === "completed") {
+                          badge.textContent = "Terminé";
+                          badge.className = "text-xs font-semibold text-green-500 status-badge shrink-0 w-20 text-right";
+                          completed++;
+                      } else if (q.status === "error") {
+                          badge.textContent = "Erreur";
+                          badge.className = "text-xs font-semibold text-red-500 status-badge shrink-0 w-20 text-right";
+                          errors++;
+                      }
+                  }
+              });
+              showProgress(completed + errors, queue.length);
+          });
+      });
+      
+      listen("queue-finished", async () => {
+          printBtn.disabled = false;
+          cancelBtn.classList.add("hidden");
+          pauseQueueBtn.classList.add("hidden");
+          resumeQueueBtn.classList.add("hidden");
+          exportLogsBtn.classList.remove("hidden");
+          
+          statusMessage.textContent = "File d'attente terminée !";
+          modalSuccessCount.textContent = "-";
+          modalErrorCount.textContent = "-";
+          printModal.classList.remove("hidden");
+          setTimeout(() => {
+            printModal.classList.remove("opacity-0");
+            printModal.querySelector("div")?.classList.remove("scale-95");
+          }, 50);
+          
+          loadAnalytics();
+      });
   }
 
-  if (!printCancelled) {
-    statusMessage.textContent = "Impression par lots terminée !";
-    // Notification de fin
-    await notify(
-      "TauriPrint — Impression terminée",
-      `${successPaths.length} fichier(s) imprimé(s) avec succès.${errorCount > 0 ? ` ${errorCount} erreur(s).` : ""}`
-    );
-  }
-  printBtn.disabled = false;
-  cancelBtn.classList.add("hidden");
-  exportLogsBtn.classList.remove("hidden");
-
-  // Affichage Modal
-  modalSuccessCount.textContent = successPaths.length.toString();
-  modalErrorCount.textContent = errorCount.toString();
-  printModal.classList.remove("hidden");
-  setTimeout(() => {
-    printModal.classList.remove("opacity-0");
-    printModalContent.classList.remove("scale-95");
-  }, 50);
+  await invoke("start_queue", { items: queueItems });
+  statusMessage.textContent = "File d'attente envoyée au backend...";
 }
+
+pauseQueueBtn.addEventListener("click", () => {
+    invoke("pause_queue");
+    pauseQueueBtn.classList.add("hidden");
+    resumeQueueBtn.classList.remove("hidden");
+    statusMessage.textContent = "File d'attente en pause.";
+});
+
+resumeQueueBtn.addEventListener("click", () => {
+    invoke("resume_queue");
+    resumeQueueBtn.classList.add("hidden");
+    pauseQueueBtn.classList.remove("hidden");
+    statusMessage.textContent = "Reprise de l'impression...";
+});
+
 
 async function startPrinting() {
   const selectedPrinter = printerSelect.value;
@@ -678,7 +725,7 @@ async function setupHotFolderListener() {
         // Déplacer vers "Imprimé/"
         try {
           const printedDir = currentHotFolderPath + "\\Imprimé";
-          await invoke("move_file", { source: filePath, destFolder: printedDir });
+          await invoke("move_file", { source: filePath, isError: false });
           // Retirer de la liste car le fichier a été déplacé
           filesToPrint = filesToPrint.filter(f => f !== filePath);
           renderFileList();
@@ -694,7 +741,7 @@ async function setupHotFolderListener() {
         // Déplacer vers "Erreurs/"
         try {
           const errorsDir = currentHotFolderPath + "\\Erreurs";
-          await invoke("move_file", { source: filePath, destFolder: errorsDir });
+          await invoke("move_file", { source: filePath, isError: true });
           filesToPrint = filesToPrint.filter(f => f !== filePath);
           renderFileList();
         } catch (moveErr) {
@@ -712,15 +759,12 @@ async function setupHotFolderListener() {
 // ============================================================
 
 cancelBtn.addEventListener("click", () => {
-  printCancelled = true;
-  cancelBtn.disabled = true;
-  cancelBtn.textContent = "Annulation...";
-  statusMessage.textContent = "Annulation en cours, veuillez patienter...";
-  // L'annulation prend effet au prochain tour de la boucle for dans executePrintProcess
-  setTimeout(() => {
-    cancelBtn.disabled = false;
-    cancelBtn.textContent = "✕ Annuler";
-  }, 2000);
+    invoke("pause_queue");
+    statusMessage.textContent = "File d'attente stoppée.";
+    printBtn.disabled = false;
+    cancelBtn.classList.add("hidden");
+    pauseQueueBtn.classList.add("hidden");
+    resumeQueueBtn.classList.add("hidden");
 });
 
 // ============================================================
@@ -844,4 +888,63 @@ modalCleanBtn.addEventListener("click", () => {
   successPaths = [];
   renderFileList();
   closeModal();
+});
+
+// ============================================================
+// TABLEAU DE BORD (ANALYTICS)
+// ============================================================
+let analyticsChart: Chart | null = null;
+
+async function loadAnalytics() {
+  try {
+    const data = await invoke<any>("get_analytics");
+    statTotalPages.textContent = data.total_pages.toString();
+    statSuccess.textContent = data.total_success.toString();
+    statErrors.textContent = data.total_errors.toString();
+
+    const printers = Object.keys(data.printers);
+    const usages = Object.values(data.printers);
+
+    const ctx = document.getElementById('analyticsChart') as HTMLCanvasElement;
+    if (analyticsChart) analyticsChart.destroy();
+    
+    analyticsChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: printers,
+        datasets: [{
+          label: 'Impressions réussies',
+          data: usages,
+          backgroundColor: '#3b82f6',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    });
+  } catch (err) {
+    console.error("Erreur analytics:", err);
+  }
+}
+
+dashboardBtn.addEventListener("click", () => {
+  loadAnalytics();
+  dashboardModal.classList.remove("hidden");
+  setTimeout(() => {
+    dashboardModal.classList.remove("opacity-0");
+    dashboardModal.querySelector("div")?.classList.remove("scale-95");
+  }, 10);
+});
+
+dashboardCloseBtn.addEventListener("click", () => {
+  dashboardModal.classList.add("opacity-0");
+  dashboardModal.querySelector("div")?.classList.add("scale-95");
+  setTimeout(() => {
+    dashboardModal.classList.add("hidden");
+  }, 300);
 });
