@@ -37,8 +37,47 @@ pub struct PrintOptions {
     page_filter: String,      // "all", "even", "odd"
     #[serde(default)]
     scale: String,            // "fit", "shrink", "noscale"
+    #[serde(default)]
+    compatibility_mode: bool, // true = use default system program
+    #[serde(default)]
+    orientation: String,
+    #[serde(default)]
+    paper_source: String,
+    #[serde(default)]
+    paper_type: String,
+    
+    // Nouveautés Pro
+    #[serde(default)]
+    archive_success: String,
+    #[serde(default)]
+    archive_error: String,
+    #[serde(default)]
+    auto_rotate: bool,
+    #[serde(default)]
+    print_as_image: bool,
+    #[serde(default)]
+    stapling: String,
+    #[serde(default)]
+    punching: String,
 }
 
+impl PrintOptions {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.copies < 1 || self.copies > 1000 {
+            return Err(format!("Le nombre de copies ({}) est invalide. Doit être entre 1 et 1000.", self.copies));
+        }
+        if !self.page_range.is_empty() && !self.page_range.chars().all(|c| c.is_ascii_digit() || c == '-' || c == ',') {
+            return Err("La plage de pages contient des caractères non autorisés.".to_string());
+        }
+        if self.archive_success.contains('|') || self.archive_success.contains('>') || self.archive_success.contains('<') {
+            return Err("Chemin d'archivage (succès) contient des caractères invalides.".to_string());
+        }
+        if self.archive_error.contains('|') || self.archive_error.contains('>') || self.archive_error.contains('<') {
+            return Err("Chemin d'archivage (erreur) contient des caractères invalides.".to_string());
+        }
+        Ok(())
+    }
+}
 
 use serde::Serialize;
 use printpdf::*;
@@ -106,6 +145,24 @@ fn update_analytics(app: &tauri::AppHandle, success: bool, pages: u32, printer: 
     let path = get_analytics_path(app);
     if let Ok(json) = serde_json::to_string_pretty(&data) {
         let _ = fs::write(path, json);
+    }
+}
+
+#[tauri::command]
+fn append_log(app: tauri::AppHandle, log_line: String) {
+    let mut path = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    if !path.exists() {
+        let _ = fs::create_dir_all(&path);
+    }
+    path.push("print_logs.csv");
+    
+    // Add header if new file
+    if !path.exists() {
+        let _ = fs::write(&path, "Date,Statut,Fichier,Imprimante\n");
+    }
+    
+    if let Ok(mut file) = fs::OpenOptions::new().append(true).create(true).open(&path) {
+        let _ = writeln!(file, "{}", log_line);
     }
 }
 
@@ -225,9 +282,54 @@ fn print_file_internal(
     printer: &str,
     options: Option<&PrintOptions>,
 ) -> Result<String, String> {
+    let result = print_file_internal_core(app_handle, file_path, printer, options);
+    
+    if let Some(opts) = options {
+        if result.is_ok() && !opts.archive_success.is_empty() {
+            let _ = move_file_to_archive(file_path, &opts.archive_success);
+        } else if result.is_err() && !opts.archive_error.is_empty() {
+            let _ = move_file_to_archive(file_path, &opts.archive_error);
+        }
+    }
+    
+    result
+}
+
+fn move_file_to_archive(file_path: &str, archive_dir: &str) -> std::io::Result<()> {
+    let path = std::path::Path::new(file_path);
+    if !path.exists() { return Ok(()); }
+    let dir = std::path::Path::new(archive_dir);
+    if !dir.exists() {
+        std::fs::create_dir_all(dir)?;
+    }
+    if let Some(file_name) = path.file_name() {
+        let dest = dir.join(file_name);
+        // Si le fichier existe déjà dans l'archive, on ajoute un timestamp
+        if dest.exists() {
+            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+            let new_name = format!("{}_{}", ts, file_name.to_string_lossy());
+            std::fs::rename(path, dir.join(new_name))?;
+        } else {
+            std::fs::rename(path, dest)?;
+        }
+    }
+    Ok(())
+}
+
+fn print_file_internal_core(
+    app_handle: &tauri::AppHandle,
+    file_path: &str,
+    printer: &str,
+    options: Option<&PrintOptions>,
+) -> Result<String, String> {
     if file_path.is_empty() {
         return Err("Le chemin du fichier est invalide.".to_string());
     }
+    
+    if let Some(opts) = options {
+        opts.validate()?;
+    }
+    
     let copies = options.map(|o| o.copies).unwrap_or(1).max(1);
     
     let mut actual_path = file_path.to_string();
@@ -237,6 +339,46 @@ fn print_file_internal(
 
     #[cfg(target_os = "windows")]
     {
+        let is_compat = options.map(|o| o.compatibility_mode).unwrap_or(false);
+        if is_compat {
+            // Mode compatibilité : utiliser l'application par défaut (Word, Acrobat...)
+            // 1. Sauvegarder l'imprimante par défaut actuelle
+            // 2. Définir l'imprimante cible comme par défaut
+            // 3. Imprimer avec le verbe 'Print'
+            // 4. Restaurer l'ancienne imprimante (après un délai pour laisser le temps au spooler)
+            let ps_script = r#"
+                $PrinterName = $env:PRINTMAX_PRINTER
+                $FilePath = $env:PRINTMAX_FILE
+                $old = Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default = `$true"
+                $network = New-Object -ComObject WScript.Network
+                $network.SetDefaultPrinter($PrinterName)
+                Start-Process -FilePath $FilePath -Verb Print -PassThru
+                Start-Sleep -Seconds 3
+                if ($old) {
+                    $network.SetDefaultPrinter($old.Name)
+                }
+            "#;
+
+            let mut cmd = Command::new("powershell");
+            cmd.creation_flags(0x08000000);
+            cmd.env("PRINTMAX_PRINTER", printer);
+            cmd.env("PRINTMAX_FILE", &actual_path);
+            cmd.args([
+                "-NoProfile",
+                "-Command",
+                ps_script
+            ]);
+
+            let output = cmd.output().map_err(|e| format!("Échec PowerShell (Compat Mode): {}", e))?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !stderr.is_empty() {
+                    return Err(format!("Erreur d'impression (Compat Mode): {}", stderr));
+                }
+            }
+            return Ok(format!("Le fichier {} a été expédié au spooler (Mode Compatibilité).", file_path));
+        }
+
         let sumatra = get_sumatra_path(app_handle)?;
         let mut settings_parts: Vec<String> = Vec::new();
 
@@ -270,8 +412,30 @@ fn print_file_internal(
         let paper = options.map(|o| o.paper_size.as_str()).unwrap_or("A4");
         settings_parts.push(format!("paper={}", paper));
 
+        let orientation = options.map(|o| o.orientation.as_str()).unwrap_or("portrait");
+        match orientation {
+            "landscape" => settings_parts.push("landscape".to_string()),
+            _ => settings_parts.push("portrait".to_string()),
+        }
+
+        let paper_source = options.map(|o| o.paper_source.as_str()).unwrap_or("auto");
+        if paper_source != "auto" {
+            // SumatraPDF uses bin=X for tray. We just pass tray1, tray2, or bin number
+            settings_parts.push(format!("bin={}", paper_source));
+        }
+
         if copies > 1 {
             settings_parts.push(format!("{}x", copies));
+        }
+        
+        let auto_rotate = options.map(|o| o.auto_rotate).unwrap_or(true);
+        if auto_rotate {
+            settings_parts.push("autorotate".to_string());
+        }
+        
+        let print_as_image = options.map(|o| o.print_as_image).unwrap_or(false);
+        if print_as_image {
+            settings_parts.push("print-as-image".to_string());
         }
 
         let settings_str = settings_parts.join(",");
@@ -320,7 +484,27 @@ fn print_file(
     print_file_internal(&app_handle, &file_path, &printer, options.as_ref())
 }
 
-
+#[tauri::command]
+fn open_printer_properties(printer_name: String) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("rundll32");
+        cmd.creation_flags(0x08000000);
+        cmd.args([
+            "printui.dll,PrintUIEntry",
+            "/p",
+            "/n",
+            &printer_name,
+        ]);
+        // Run asynchronously so we don't block the UI while the properties window is open
+        let _ = cmd.spawn().map_err(|e| format!("Erreur lors de l'ouverture des propriétés: {}", e))?;
+        Ok("Propriétés ouvertes.".to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Non supporté sur ce système.".to_string())
+    }
+}
 
 #[tauri::command]
 fn start_queue(app: tauri::AppHandle, state: State<PrintQueueState>, items: Vec<QueueItem>) -> Result<(), String> {
@@ -416,7 +600,7 @@ fn reorder_queue(state: State<PrintQueueState>, old_index: usize, new_index: usi
 // ============================================================
 
 #[tauri::command]
-fn process_dropped_paths(paths: Vec<String>) -> Vec<String> {
+async fn process_dropped_paths(paths: Vec<String>) -> Result<Vec<String>, String> {
     let mut files = Vec::new();
     for path_str in paths {
         let path = Path::new(&path_str);
@@ -432,7 +616,7 @@ fn process_dropped_paths(paths: Vec<String>) -> Vec<String> {
             }
         }
     }
-    files
+    Ok(files)
 }
 
 #[tauri::command]
@@ -455,26 +639,85 @@ fn generate_slip_sheet(text: String) -> Result<String, String> {
 fn check_print_jobs(printer: String) -> Result<u32, String> {
     #[cfg(target_os = "windows")]
     {
+        // Utilisation de Get-CimInstance (très rapide) pour éviter wmic qui est déprécié sur Windows 11
         let mut cmd = Command::new("powershell");
         cmd.creation_flags(0x08000000);
+        let ps_script = format!(
+            r#"(Get-CimInstance Win32_PrintJob -Filter "Name like '%{}%'" -ErrorAction SilentlyContinue).Count"#,
+            printer.replace("'", "''")
+        );
+        
         let output = cmd
-            .args([
-                "-Command",
-                &format!(
-                    "(Get-PrintJob -PrinterName '{}').Count",
-                    printer.replace("'", "''")
-                ),
-            ])
+            .args(["-NoProfile", "-Command", &ps_script])
             .output()
-            .map_err(|e| format!("Erreur PS: {}", e))?;
-        Ok(String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .parse::<u32>()
-            .unwrap_or(0))
+            .map_err(|e| format!("Erreur PS (CimInstance): {}", e))?;
+            
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let count = stdout.trim().parse::<u32>().unwrap_or(0);
+        Ok(count)
     }
     #[cfg(not(target_os = "windows"))]
     {
         Ok(0) // Placeholder
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct PrinterCapabilities {
+    pub color_supported: bool,
+    pub duplex_supported: bool,
+    pub supported_paper_sizes: Vec<u16>,
+}
+
+#[tauri::command]
+fn get_printer_capabilities(printer: String) -> Result<PrinterCapabilities, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("powershell");
+        cmd.creation_flags(0x08000000);
+        let ps_script = format!(
+            r#"$p = Get-CimInstance Win32_Printer -Filter "Name='{}'" -ErrorAction SilentlyContinue; if ($p) {{ [PSCustomObject]@{{ Capabilities = $p.Capabilities; PaperSizesSupported = $p.PaperSizesSupported }} | ConvertTo-Json }} else {{ '{{}}' }}"#,
+            printer.replace("'", "''")
+        );
+        
+        let output = cmd
+            .args(["-NoProfile", "-Command", &ps_script])
+            .output()
+            .map_err(|e| format!("Erreur PS (Capabilities): {}", e))?;
+            
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap_or(serde_json::json!({}));
+        
+        let mut color_supported = false;
+        let mut duplex_supported = false;
+        
+        if let Some(caps) = parsed.get("Capabilities").and_then(|c| c.as_array()) {
+            for cap in caps {
+                if let Some(val) = cap.as_u64() {
+                    if val == 2 { color_supported = true; } // 2 = Color
+                    if val == 3 { duplex_supported = true; } // 3 = Duplex
+                }
+            }
+        }
+        
+        let mut supported_paper_sizes = Vec::new();
+        if let Some(sizes) = parsed.get("PaperSizesSupported").and_then(|s| s.as_array()) {
+            for size in sizes {
+                if let Some(val) = size.as_u64() {
+                    supported_paper_sizes.push(val as u16);
+                }
+            }
+        }
+        
+        Ok(PrinterCapabilities {
+            color_supported,
+            duplex_supported,
+            supported_paper_sizes
+        })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(PrinterCapabilities { color_supported: true, duplex_supported: true, supported_paper_sizes: vec![] })
     }
 }
 
@@ -813,6 +1056,7 @@ pub fn run() {
             get_printers,
             print_file,
             process_dropped_paths,
+            get_printer_capabilities,
             generate_slip_sheet,
             check_print_jobs,
             merge_pdfs,
@@ -828,7 +1072,9 @@ pub fn run() {
             pause_queue,
             resume_queue,
             cancel_queue_item,
-            reorder_queue
+            reorder_queue,
+            open_printer_properties,
+            append_log
         ])
         .run(tauri::generate_context!())
         .expect("Erreur fatale lors du lancement de l'application Tauri");

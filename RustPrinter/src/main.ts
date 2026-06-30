@@ -9,11 +9,6 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
-import * as pdfjsLib from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
-import Chart from "chart.js/auto";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 
 // Éléments du DOM (Principaux)
@@ -35,6 +30,9 @@ const optCopies = document.getElementById("opt-copies") as HTMLInputElement;
 const optColor = document.getElementById("opt-color") as HTMLSelectElement;
 const optDuplex = document.getElementById("opt-duplex") as HTMLSelectElement;
 const optPaper = document.getElementById("opt-paper") as HTMLSelectElement;
+const optOrientation = document.getElementById("opt-orientation") as HTMLSelectElement;
+const optPaperSource = document.getElementById("opt-paper-source") as HTMLSelectElement;
+const optPaperType = document.getElementById("opt-paper-type") as HTMLSelectElement;
 
 // Éléments du DOM (Options avancées PDF)
 const optPageRange = document.getElementById("opt-page-range") as HTMLInputElement;
@@ -60,6 +58,18 @@ const modalErrorCount = document.getElementById("modal-error-count") as HTMLSpan
 const modalCleanBtn = document.getElementById("modal-clean-btn") as HTMLButtonElement;
 const modalCloseBtn = document.getElementById("modal-close-btn") as HTMLButtonElement;
 
+// Éléments du DOM (Modal paramètres par fichier)
+const fsModal = document.getElementById("file-settings-modal") as HTMLDivElement;
+const fsModalTitle = document.getElementById("fs-modal-title") as HTMLHeadingElement;
+const fsModalCloseBtn = document.getElementById("fs-modal-close-btn") as HTMLButtonElement;
+const fsOptCopies = document.getElementById("fs-opt-copies") as HTMLInputElement;
+const fsOptColor = document.getElementById("fs-opt-color") as HTMLSelectElement;
+const fsOptDuplex = document.getElementById("fs-opt-duplex") as HTMLSelectElement;
+const fsOptPageRange = document.getElementById("fs-opt-page-range") as HTMLInputElement;
+const fsModalResetBtn = document.getElementById("fs-modal-reset-btn") as HTMLButtonElement;
+const fsModalSaveBtn = document.getElementById("fs-modal-save-btn") as HTMLButtonElement;
+let currentSettingsIndex = -1;
+
 // Éléments du DOM (Phase 2 — Nouveautés)
 const fileCountBadge = document.getElementById("file-count") as HTMLSpanElement;
 const clearAllBtn = document.getElementById("clear-all-btn") as HTMLButtonElement;
@@ -76,6 +86,16 @@ const hotFolderPath = document.getElementById("hot-folder-path") as HTMLParagrap
 const hotFolderStatus = document.getElementById("hot-folder-status") as HTMLSpanElement;
 
 
+// Éléments du DOM (Paramètres & Propriétés)
+const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement;
+const settingsModal = document.getElementById("settings-modal") as HTMLDivElement;
+const settingsCloseBtn = document.getElementById("settings-close-btn") as HTMLButtonElement;
+const printerPropertiesBtn = document.getElementById("printer-properties-btn") as HTMLButtonElement;
+const settingLogMode = document.getElementById("setting-log-mode") as HTMLInputElement;
+const settingCompatMode = document.getElementById("setting-compat-mode") as HTMLInputElement;
+const settingsTabBtns = document.querySelectorAll(".settings-tab-btn");
+const settingsTabs = document.querySelectorAll(".settings-tab");
+
 const dashboardBtn = document.getElementById("dashboard-btn") as HTMLButtonElement;
 const dashboardModal = document.getElementById("dashboard-modal") as HTMLDivElement;
 const dashboardCloseBtn = document.getElementById("dashboard-close-btn") as HTMLButtonElement;
@@ -88,7 +108,11 @@ const pauseQueueBtn = document.getElementById("pause-queue-btn") as HTMLButtonEl
 const resumeQueueBtn = document.getElementById("resume-queue-btn") as HTMLButtonElement;
 
 // État de l'application
-let filesToPrint: string[] = [];
+interface FileItem {
+  path: string;
+  options: Partial<PrintOptionsPayload> | null;
+}
+let filesToPrint: FileItem[] = [];
 let printLogs: string[] = []; 
 let successPaths: string[] = [];
 let printCancelled = false;
@@ -102,6 +126,9 @@ interface PrintProfile {
   color: string;
   duplex: string;
   paper: string;
+  orientation: string;
+  paper_source: string;
+  paper_type: string;
   page_range: string;
   page_filter: string;
   scale: string;
@@ -112,10 +139,21 @@ interface PrintOptionsPayload {
   color: boolean;
   duplex: string;
   paper_size: string;
+  orientation: string;
+  paper_source: string;
+  paper_type: string;
   page_range: string;
   page_filter: string;
   scale: string;
   reverse: boolean;
+  compatibility_mode: boolean;
+  // Options Pro
+  archive_success: string;
+  archive_error: string;
+  auto_rotate: boolean;
+  print_as_image: boolean;
+  stapling: string;
+  punching: string;
 }
 
 // ============================================================
@@ -154,9 +192,55 @@ async function loadPrinters() {
     
     // Charger le profil après les imprimantes pour sélectionner la bonne
     loadProfilesFromStorage();
+    
+    // Mettre à jour les capacités
+    await updatePrinterCapabilities();
   } catch (error) {
     statusMessage.textContent = "Erreur de chargement des imprimantes.";
     console.error("Erreur chargement imprimantes:", error);
+  }
+}
+
+printerSelect.addEventListener("change", updatePrinterCapabilities);
+
+async function updatePrinterCapabilities() {
+  const printer = printerSelect.value;
+  if (!printer) return;
+  try {
+    const caps: any = await invoke("get_printer_capabilities", { printer });
+    
+    // Update Color options
+    if (caps.color_supported) {
+      optColor.innerHTML = '<option value="true">Couleur</option><option value="false">Noir & Blanc</option>';
+    } else {
+      optColor.innerHTML = '<option value="false">Noir & Blanc</option>';
+    }
+    
+    // Update Duplex options
+    if (caps.duplex_supported) {
+      optDuplex.innerHTML = '<option value="OneSided">Simple face</option><option value="TwoSidedLongEdge">Recto-verso (Bord long)</option><option value="TwoSidedShortEdge">Recto-verso (Bord court)</option>';
+    } else {
+      optDuplex.innerHTML = '<option value="OneSided">Simple face</option>';
+    }
+    
+    // Update Paper options
+    if (caps.supported_paper_sizes && caps.supported_paper_sizes.length > 0) {
+      const sizes = caps.supported_paper_sizes;
+      optPaper.innerHTML = '';
+      
+      // On force A4 par défaut car l'API Windows l'oublie très souvent ou utilise des codes personnalisés
+      optPaper.innerHTML += '<option value="A4">A4</option>';
+      
+      if (sizes.includes(8)) optPaper.innerHTML += '<option value="A3">A3</option>';
+      if (sizes.includes(11)) optPaper.innerHTML += '<option value="A5">A5</option>';
+      if (sizes.includes(1)) optPaper.innerHTML += '<option value="Letter">Lettre US</option>';
+      if (sizes.includes(5)) optPaper.innerHTML += '<option value="Legal">Légal US</option>';
+    } else {
+      // Fallback si on n'a pas pu lire les formats
+      optPaper.innerHTML = '<option value="A4">A4</option><option value="A3">A3</option><option value="A5">A5</option><option value="Letter">Lettre US</option><option value="Legal">Légal US</option>';
+    }
+  } catch(e) {
+    console.warn("Erreur capacités imprimante:", e);
   }
 }
 
@@ -249,26 +333,33 @@ saveProfileBtn.addEventListener("click", () => {
 // ============================================================
 
 function addFile(filePath: string) {
-  if (filesToPrint.includes(filePath)) return;
-  filesToPrint.push(filePath);
+  if (filesToPrint.some(f => f.path === filePath)) return;
+  filesToPrint.push({ path: filePath, options: null });
   renderFileList();
 }
 
+let renderId = 0;
+
 
 async function renderFileList() {
-  fileList.innerHTML = "";
+  const currentRenderId = ++renderId;
   updateFileCount();
 
   let pdfPageCounts = {};
   try {
-    const pdfFiles = filesToPrint.filter(f => f.toLowerCase().endsWith(".pdf"));
+    const pdfFiles = filesToPrint.filter(f => f.path.toLowerCase().endsWith(".pdf")).map(f => f.path);
     if (pdfFiles.length > 0) {
       pdfPageCounts = await invoke("get_pdf_page_counts", { filePaths: pdfFiles });
     }
   } catch (e) {}
 
+  if (currentRenderId !== renderId) return; // Abort if another render started
+
+  fileList.innerHTML = "";
+
   for (let index = 0; index < filesToPrint.length; index++) {
-    const filePath = filesToPrint[index];
+    const fileItem = filesToPrint[index];
+    const filePath = fileItem.path;
     const fileName = filePath.split(/[\\/]/).pop() || filePath;
     const isPdf = filePath.toLowerCase().endsWith(".pdf");
     const isImg = filePath.match(/\.(jpg|jpeg|png|gif|webp)$/i);
@@ -287,21 +378,6 @@ async function renderFileList() {
       img.src = convertFileSrc(filePath);
       img.className = "w-full h-full object-cover";
       thumbContainer.appendChild(img);
-    } else if (isPdf) {
-      const canvas = document.createElement("canvas");
-      canvas.className = "w-full h-full object-contain";
-      thumbContainer.appendChild(canvas);
-      try {
-        const loadingTask = pdfjsLib.getDocument({ url: convertFileSrc(filePath) });
-        loadingTask.promise.then(pdf => {
-          return pdf.getPage(1);
-        }).then(page => {
-          const viewport = page.getViewport({ scale: 1.0 });
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          page.render({ canvasContext: canvas.getContext('2d'), viewport });
-        }).catch(e => console.warn(e));
-      } catch (e) {}
     } else {
       thumbContainer.innerHTML = '📄';
     }
@@ -323,6 +399,15 @@ async function renderFileList() {
       titleContainer.appendChild(pageSpan);
     }
 
+    const settingsBtn = document.createElement("button");
+    settingsBtn.className = "text-slate-400 hover:text-blue-500 font-bold px-2";
+    settingsBtn.innerHTML = "⚙️";
+    settingsBtn.title = "Paramètres de ce fichier";
+    settingsBtn.onclick = () => openFileSettings(index);
+    if (fileItem.options !== null) {
+      settingsBtn.classList.add("text-blue-500");
+    }
+
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "text-red-500 hover:text-red-700 font-bold px-2";
     deleteBtn.textContent = "✕";
@@ -336,6 +421,7 @@ async function renderFileList() {
     li.appendChild(thumbContainer);
     li.appendChild(titleContainer);
     li.appendChild(statusBadge);
+    li.appendChild(settingsBtn);
     li.appendChild(deleteBtn);
 
     li.addEventListener("dragstart", handleDragStart);
@@ -375,10 +461,69 @@ function handleDrop(e: DragEvent) {
   renderFileList();
 };
 
+function openFileSettings(index: number) {
+  const item = filesToPrint[index];
+  if (!item) return;
+  currentSettingsIndex = index;
+  fsModalTitle.textContent = `Paramètres : ${item.path.split(/[/\\]/).pop()}`;
+  
+  // Remplir avec les options spécifiques ou globales
+  const currentGlobal = getCurrentOptions();
+  fsOptCopies.value = item.options?.copies?.toString() || currentGlobal.copies.toString();
+  fsOptColor.value = item.options?.color !== undefined ? item.options.color.toString() : currentGlobal.color.toString();
+  fsOptDuplex.value = item.options?.duplex || currentGlobal.duplex;
+  fsOptPageRange.value = item.options?.page_range || currentGlobal.page_range;
+
+  fsModal.classList.remove("hidden");
+  setTimeout(() => {
+    fsModal.classList.remove("opacity-0");
+    fsModal.querySelector("div")?.classList.remove("scale-95");
+  }, 10);
+}
+
+function closeFileSettings() {
+  fsModal.classList.add("opacity-0");
+  fsModal.querySelector("div")?.classList.add("scale-95");
+  setTimeout(() => fsModal.classList.add("hidden"), 300);
+}
+
+fsModalCloseBtn.addEventListener("click", closeFileSettings);
+
+fsModalResetBtn.addEventListener("click", () => {
+  if (currentSettingsIndex >= 0) {
+    filesToPrint[currentSettingsIndex].options = null;
+    renderFileList();
+    closeFileSettings();
+  }
+});
+
+fsModalSaveBtn.addEventListener("click", () => {
+  if (currentSettingsIndex >= 0) {
+    const copies = parseInt(fsOptCopies.value);
+    const range = fsOptPageRange.value.trim();
+    if (isNaN(copies) || copies < 1 || copies > 1000) {
+      alert("Erreur: Le nombre de copies doit être entre 1 et 1000.");
+      return;
+    }
+    if (range !== "" && !/^([0-9]+(-[0-9]+)?)(,[0-9]+(-[0-9]+)?)*$/.test(range)) {
+      alert("Erreur: Le format de la plage de pages est invalide. (ex: 1-5,7)");
+      return;
+    }
+    filesToPrint[currentSettingsIndex].options = {
+      copies: copies,
+      color: fsOptColor.value === "true",
+      duplex: fsOptDuplex.value,
+      page_range: range
+    };
+    renderFileList();
+    closeFileSettings();
+  }
+});
+
 function sortFilesAlphabetically() {
   filesToPrint.sort((a, b) => {
-    const nameA = a.split(/[/\\]/).pop()?.toLowerCase() || "";
-    const nameB = b.split(/[/\\]/).pop()?.toLowerCase() || "";
+    const nameA = a.path.split(/[/\\]/).pop()?.toLowerCase() || "";
+    const nameB = b.path.split(/[/\\]/).pop()?.toLowerCase() || "";
     return nameA.localeCompare(nameB);
   });
   renderFileList();
@@ -423,8 +568,13 @@ filterImgBtn.addEventListener("click", () => {
 
 // ==== LOGS ====
 function logPrint(status: string, file: string, printer: string) {
+  if (!settingLogMode.checked) return; // Seulement si activé
   const date = new Date().toISOString();
-  printLogs.push(`"${date}","${status}","${file}","${printer}"`);
+  const logLine = `"${date}","${status}","${file}","${printer}"`;
+  printLogs.push(logLine);
+  
+  // Save to CSV via backend
+  invoke("append_log", { logLine }).catch(console.error);
 }
 
 exportLogsBtn.addEventListener("click", async () => {
@@ -461,15 +611,36 @@ function hideProgress() {
 // ============================================================
 
 function getCurrentOptions(): PrintOptionsPayload {
+  const copies = parseInt(optCopies.value);
+  if (isNaN(copies) || copies < 1 || copies > 1000) {
+    throw new Error("Le nombre de copies doit être entre 1 et 1000.");
+  }
+  const range = optPageRange?.value.trim() || "";
+  if (range !== "" && !/^([0-9]+(-[0-9]+)?)(,[0-9]+(-[0-9]+)?)*$/.test(range)) {
+    throw new Error("Le format de la plage de pages est invalide. Utilisez un format comme 1-5,7.");
+  }
+  
   return {
-    copies: parseInt(optCopies.value) || 1,
+    copies: copies,
     color: optColor.value === "true",
     duplex: optDuplex.value,
     paper_size: optPaper.value,
+    orientation: optOrientation?.value || "portrait",
+    paper_source: optPaperSource?.value || "auto",
+    paper_type: optPaperType?.value || "plain",
     page_range: optPageRange?.value || "",
     page_filter: optPageFilter?.value || "all",
     scale: optScale?.value || "fit",
-    reverse: false
+    reverse: false,
+    compatibility_mode: settingCompatMode.checked,
+    
+    // Nouveautés Pro
+    archive_success: (document.getElementById("setting-auto-archive") as HTMLInputElement)?.checked ? (document.getElementById("setting-archive-success") as HTMLInputElement)?.value : "",
+    archive_error: (document.getElementById("setting-auto-archive") as HTMLInputElement)?.checked ? (document.getElementById("setting-archive-error") as HTMLInputElement)?.value : "",
+    auto_rotate: (document.getElementById("setting-auto-rotate") as HTMLInputElement)?.checked ?? true,
+    print_as_image: (document.getElementById("setting-print-as-image") as HTMLInputElement)?.checked ?? false,
+    stapling: (document.getElementById("setting-stapling") as HTMLSelectElement)?.value || "none",
+    punching: (document.getElementById("setting-punching") as HTMLSelectElement)?.value || "none",
   };
 }
 
@@ -519,8 +690,16 @@ async function executePrintProcess() {
   if (!selectedPrinter || filesToPrint.length === 0) return;
 
   const fileCount = filesToPrint.length;
-  const copies = parseInt(optCopies.value) || 1;
-  const confirmMsg = `Vous êtes sur le point d'imprimer ${fileCount} fichier(s) (${copies} copie(s) chacun) sur « ${selectedPrinter} ».\n\nContinuer ?`;
+  let options;
+  try {
+    options = getCurrentOptions();
+  } catch (err: any) {
+    alert(err.message);
+    return;
+  }
+
+  const copies = options.copies;
+  const confirmMsg = `Vous êtes sur le point d'imprimer ${fileCount} fichier(s) sur « ${selectedPrinter} ».\n\nContinuer ?`;
   if (!confirm(confirmMsg)) {
     return;
   }
@@ -534,13 +713,11 @@ async function executePrintProcess() {
   printLogs = [];
   successPaths = [];
 
-  const options = getCurrentOptions();
-
   const queueItems = filesToPrint.map((file, i) => ({
       id: i.toString(),
-      file_path: file,
+      file_path: file.path,
       printer: selectedPrinter,
-      options: options,
+      options: file.options ? { ...options, ...file.options } : options,
       status: "pending"
   }));
 
@@ -553,7 +730,7 @@ async function executePrintProcess() {
           let completed = 0;
           let errors = 0;
           
-          filesToPrint = queue.map((q) => q.file_path);
+          filesToPrint = queue.map((q) => ({ path: q.file_path, options: null }));
           renderFileList().then(() => {
               queue.forEach((q, i) => {
                   const badge = document.getElementById(`status-${i}`);
@@ -755,7 +932,78 @@ async function setupHotFolderListener() {
 }
 
 // ============================================================
-// ANNULATION
+// ÉVÉNEMENTS UI ET PARAMÈTRES
+// ============================================================
+
+function loadSettings() {
+  settingLogMode.checked = localStorage.getItem("logMode") === "true";
+  settingCompatMode.checked = localStorage.getItem("compatMode") === "true";
+}
+
+settingLogMode.addEventListener("change", () => {
+  localStorage.setItem("logMode", settingLogMode.checked.toString());
+});
+
+settingCompatMode.addEventListener("change", () => {
+  localStorage.setItem("compatMode", settingCompatMode.checked.toString());
+});
+
+printerPropertiesBtn.addEventListener("click", async () => {
+  if (!printerSelect.value) {
+    alert("Veuillez d'abord sélectionner une imprimante.");
+    return;
+  }
+  try {
+    await invoke("open_printer_properties", { printerName: printerSelect.value });
+  } catch(e) {
+    alert("Erreur: " + e);
+  }
+});
+
+settingsBtn.addEventListener("click", () => {
+  settingsModal.classList.remove("hidden");
+  setTimeout(() => {
+    settingsModal.classList.remove("opacity-0");
+    settingsModal.querySelector("div")?.classList.remove("scale-95");
+  }, 10);
+});
+
+settingsCloseBtn.addEventListener("click", () => {
+  settingsModal.classList.add("opacity-0");
+  settingsModal.querySelector("div")?.classList.add("scale-95");
+  setTimeout(() => settingsModal.classList.add("hidden"), 300);
+});
+
+settingsTabBtns.forEach(btn => {
+  btn.addEventListener("click", (e) => {
+    // Reset tabs
+    settingsTabBtns.forEach(b => {
+      b.classList.remove("active", "bg-blue-100", "text-blue-700", "dark:bg-indigo-900/40", "dark:text-indigo-300");
+      b.classList.add("text-slate-600", "dark:text-slate-300");
+    });
+    settingsTabs.forEach(tab => {
+      tab.classList.remove("block");
+      tab.classList.add("hidden");
+    });
+    
+    // Active clicked tab
+    const targetBtn = e.currentTarget as HTMLButtonElement;
+    targetBtn.classList.remove("text-slate-600", "dark:text-slate-300");
+    targetBtn.classList.add("active", "bg-blue-100", "text-blue-700", "dark:bg-indigo-900/40", "dark:text-indigo-300");
+    
+    const targetId = targetBtn.getAttribute("data-target");
+    if (targetId) {
+      const targetTab = document.getElementById(targetId);
+      if (targetTab) {
+        targetTab.classList.remove("hidden");
+        targetTab.classList.add("block");
+      }
+    }
+  });
+});
+
+// ============================================================
+// DRAG & DROP
 // ============================================================
 
 cancelBtn.addEventListener("click", () => {
@@ -810,6 +1058,7 @@ async function loadAppVersion() {
 
 window.addEventListener("DOMContentLoaded", () => {
   initTheme();
+  loadSettings();
   loadPrinters();
   setupTauriDragDrop();
   setupHotFolderListener();
@@ -823,8 +1072,15 @@ toggleOptionsBtn.addEventListener("click", () => optionsPanel.classList.toggle("
 
 dropZone.addEventListener("click", async () => {
   try {
-    const selected: string[] = await invoke("open_file_dialog");
-    if (selected && selected.length > 0) {
+    const selected = await open({
+      multiple: true,
+      filters: [{
+        name: 'Documents',
+        extensions: ['pdf', 'png', 'jpg', 'jpeg', 'txt', 'docx']
+      }]
+    });
+    
+    if (selected && Array.isArray(selected) && selected.length > 0) {
       statusMessage.textContent = "Analyse des fichiers sélectionnés...";
       const files: string[] = await invoke("process_dropped_paths", { paths: selected });
       files.forEach((path) => addFile(path));
@@ -893,7 +1149,7 @@ modalCleanBtn.addEventListener("click", () => {
 // ============================================================
 // TABLEAU DE BORD (ANALYTICS)
 // ============================================================
-let analyticsChart: Chart | null = null;
+let analyticsChart: any = null;
 
 async function loadAnalytics() {
   try {
@@ -907,6 +1163,8 @@ async function loadAnalytics() {
 
     const ctx = document.getElementById('analyticsChart') as HTMLCanvasElement;
     if (analyticsChart) analyticsChart.destroy();
+    
+    const { default: Chart } = await import('chart.js/auto');
     
     analyticsChart = new Chart(ctx, {
       type: 'bar',

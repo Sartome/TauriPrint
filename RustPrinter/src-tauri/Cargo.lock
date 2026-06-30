@@ -4127,7 +4127,7 @@ dependencies = [
 
 [[package]]
 name = "rustprinter"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "image 0.25.10",
  "lazy_static",
