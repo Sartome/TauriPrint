@@ -4127,7 +4127,7 @@ dependencies = [
 
 [[package]]
 name = "rustprinter"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "image 0.25.10",
  "lazy_static",
@@ -4144,6 +4144,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-store",
  "tauri-plugin-updater",
+ "tokio",
  "walkdir",
 ]
 
@@ -5411,7 +5412,9 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",

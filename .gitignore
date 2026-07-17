@@ -1,0 +1,10 @@
+# Ruflo / Claude-Flow Runtime Data
+.claude-flow/
+code_map.md
+
+# Local MCP configuration (might contain secrets or local paths)
+.mcp.json
+
+# Ruflo generated rules, agents and skills
+.claude/
+CLAUDE.md

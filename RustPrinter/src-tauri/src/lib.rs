@@ -59,6 +59,8 @@ pub struct PrintOptions {
     stapling: String,
     #[serde(default)]
     punching: String,
+    #[serde(default)]
+    exclude_blank_pages: bool, // Nouveau: exclure pages blanches
 }
 
 impl PrintOptions {
@@ -89,6 +91,17 @@ pub struct AnalyticsData {
     pub success_count: u32,
     pub error_count: u32,
     pub printers_used: std::collections::HashMap<String, u32>,
+    #[serde(default)]
+    pub duplex_count: u32,
+    #[serde(default)]
+    pub total_sheets_saved: u32,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct PrinterStatusInfo {
+    pub name: String,
+    pub status: String,
+    pub connected: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -100,10 +113,15 @@ pub struct QueueItem {
     pub status: String, // "pending", "printing", "completed", "error"
 }
 
+pub struct QueueData {
+    pub items: Vec<QueueItem>,
+    pub is_running: bool,
+    pub is_paused: bool,
+}
+
 pub struct PrintQueueState {
-    pub queue: Mutex<Vec<QueueItem>>,
-    pub is_paused: Mutex<bool>,
-    pub is_running: Mutex<bool>,
+    pub data: std::sync::Mutex<QueueData>,
+    pub notify: std::sync::Arc<tokio::sync::Notify>,
 }
 
 // ============================================================
@@ -133,12 +151,16 @@ fn get_analytics(app: tauri::AppHandle) -> Result<AnalyticsData, String> {
     Ok(AnalyticsData::default())
 }
 
-fn update_analytics(app: &tauri::AppHandle, success: bool, pages: u32, printer: String) {
+fn update_analytics(app: &tauri::AppHandle, success: bool, pages: u32, printer: String, is_duplex: bool) {
     let mut data = get_analytics(app.clone()).unwrap_or_default();
     if success {
         data.success_count += 1;
         data.total_pages_printed += pages;
         *data.printers_used.entry(printer).or_insert(0) += 1;
+        if is_duplex {
+            data.duplex_count += 1;
+            data.total_sheets_saved += (pages + 1) / 2;
+        }
     } else {
         data.error_count += 1;
     }
@@ -475,13 +497,17 @@ fn print_file_internal_core(
 }
 
 #[tauri::command]
-fn print_file(
+async fn print_file(
     app_handle: tauri::AppHandle,
     file_path: String,
     printer: String,
     options: Option<PrintOptions>,
 ) -> Result<String, String> {
-    print_file_internal(&app_handle, &file_path, &printer, options.as_ref())
+    tokio::task::spawn_blocking(move || {
+        print_file_internal(&app_handle, &file_path, &printer, options.as_ref())
+    })
+    .await
+    .map_err(|e| format!("Erreur d'exécution asynchrone: {}", e))?
 }
 
 #[tauri::command]
@@ -507,92 +533,83 @@ fn open_printer_properties(printer_name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn start_queue(app: tauri::AppHandle, state: State<PrintQueueState>, items: Vec<QueueItem>) -> Result<(), String> {
+fn start_queue(app: tauri::AppHandle, state: State<'_, PrintQueueState>) -> Result<(), String> {
     {
-        let mut q = state.queue.lock().unwrap();
-        *q = items;
-        *state.is_paused.lock().unwrap() = false;
+        let mut data = state.data.lock().unwrap();
+        if data.is_running { return Ok(()); }
+        data.is_running = true;
+        data.is_paused = false;
     }
-    
     let app_clone = app.clone();
-    std::thread::spawn(move || {
-        let state = app_clone.state::<PrintQueueState>();
-        *state.is_running.lock().unwrap() = true;
-        
+    tauri::async_runtime::spawn(async move {
         loop {
-            while *state.is_paused.lock().unwrap() {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            }
-            
-            let mut next_idx = None;
-            {
-                let q = state.queue.lock().unwrap();
-                for (i, item) in q.iter().enumerate() {
-                    if item.status == "pending" {
-                        next_idx = Some(i);
-                        break;
-                    }
-                }
-            }
-            
+            let next_idx = {
+                let state = app_clone.state::<PrintQueueState>();
+                let data = state.data.lock().unwrap();
+                if !data.is_running || data.is_paused { None }
+                else { data.items.iter().position(|i| i.status == "pending") }
+            };
             if let Some(idx) = next_idx {
-                let item = {
-                    let mut q = state.queue.lock().unwrap();
-                    q[idx].status = "printing".to_string();
-                    let _ = app_clone.emit("queue-progress", q.clone());
-                    q[idx].clone()
+                let (item, is_duplex) = {
+                    let state = app_clone.state::<PrintQueueState>();
+                    let mut data = state.data.lock().unwrap();
+                    data.items[idx].status = "printing".to_string();
+                    let item = data.items[idx].clone();
+                    let is_duplex = item.options.as_ref().map(|o| o.duplex != "OneSided").unwrap_or(false);
+                    (item, is_duplex)
                 };
-                
-                let res = print_file_internal(&app_clone, &item.file_path, &item.printer, item.options.as_ref());
-                
+                let app_for_print = app_clone.clone();
+                let res = tokio::task::spawn_blocking(move || print_file_internal(&app_for_print, &item.file_path, &item.printer, item.options.as_ref())).await.unwrap();
                 {
-                    let mut q = state.queue.lock().unwrap();
-                    if res.is_ok() {
-                        q[idx].status = "completed".to_string();
-                        update_analytics(&app_clone, true, 1, item.printer.clone());
-                    } else {
-                        q[idx].status = "error".to_string();
-                        update_analytics(&app_clone, false, 0, item.printer.clone());
-                    }
-                    let _ = app_clone.emit("queue-progress", q.clone());
+                    let state = app_clone.state::<PrintQueueState>();
+                    let mut data = state.data.lock().unwrap();
+                    if res.is_ok() { data.items[idx].status = "completed".to_string(); update_analytics(&app_clone, true, 1, data.items[idx].printer.clone(), is_duplex); }
+                    else { data.items[idx].status = "error".to_string(); update_analytics(&app_clone, false, 0, data.items[idx].printer.clone(), false); }
+                    let _ = app_clone.emit("queue-progress", data.items.clone());
                 }
             } else {
-                break;
+                let state = app_clone.state::<PrintQueueState>();
+                let should_break = {
+                    let mut data = state.data.lock().unwrap();
+                    if !data.items.iter().any(|i| i.status == "pending") { data.is_running = false; true } else { false }
+                };
+                if should_break { let _ = app_clone.emit("queue-finished", ()); break; } else {
+                    let notify = state.notify.clone();
+                    notify.notified().await;
+                }
             }
         }
-        *state.is_running.lock().unwrap() = false;
-        let _ = app_clone.emit("queue-finished", ());
     });
     Ok(())
 }
 
 #[tauri::command]
-fn pause_queue(state: State<PrintQueueState>) {
-    *state.is_paused.lock().unwrap() = true;
+fn pause_queue(state: State<'_, PrintQueueState>) {
+    let mut data = state.data.lock().unwrap();
+    data.is_paused = true;
 }
 
 #[tauri::command]
-fn resume_queue(state: State<PrintQueueState>) {
-    *state.is_paused.lock().unwrap() = false;
+fn resume_queue(app: tauri::AppHandle, state: State<'_, PrintQueueState>) -> Result<(), String> {
+    { let mut data = state.data.lock().unwrap(); data.is_paused = false; }
+    state.notify.notify_waiters();
+    start_queue(app, state)
 }
 
 #[tauri::command]
-fn cancel_queue_item(state: State<PrintQueueState>, index: usize) -> Result<(), String> {
-    let mut q = state.queue.lock().unwrap();
-    if index < q.len() {
-        q.remove(index);
+fn cancel_queue_item(app: tauri::AppHandle, state: State<'_, PrintQueueState>, index: usize) {
+    let mut data = state.data.lock().unwrap();
+    if index < data.items.len() { data.items.remove(index); let _ = app.emit("queue-progress", data.items.clone()); }
+}
+
+#[tauri::command]
+fn reorder_queue(app: tauri::AppHandle, state: State<'_, PrintQueueState>, from_index: usize, to_index: usize) {
+    let mut data = state.data.lock().unwrap();
+    if from_index < data.items.len() && to_index < data.items.len() {
+        let item = data.items.remove(from_index);
+        data.items.insert(to_index, item);
+        let _ = app.emit("queue-progress", data.items.clone());
     }
-    Ok(())
-}
-
-#[tauri::command]
-fn reorder_queue(state: State<PrintQueueState>, old_index: usize, new_index: usize) -> Result<(), String> {
-    let mut q = state.queue.lock().unwrap();
-    if old_index < q.len() && new_index < q.len() {
-        let item = q.remove(old_index);
-        q.insert(new_index, item);
-    }
-    Ok(())
 }
 
 // ============================================================
@@ -723,27 +740,35 @@ fn get_printer_capabilities(printer: String) -> Result<PrinterCapabilities, Stri
 
 /// Retourne le nombre de pages d'un fichier PDF via lopdf.
 #[tauri::command]
-fn get_pdf_page_count(file_path: String) -> Result<u32, String> {
-    if !file_path.to_lowercase().ends_with(".pdf") {
-        return Err("Le fichier n'est pas un PDF.".to_string());
-    }
-    let doc = lopdf::Document::load(&file_path)
-        .map_err(|e| format!("Impossible de lire le PDF: {}", e))?;
-    Ok(doc.get_pages().len() as u32)
+async fn get_pdf_page_count(file_path: String) -> Result<u32, String> {
+    tokio::task::spawn_blocking(move || {
+        if !file_path.to_lowercase().ends_with(".pdf") {
+            return Err("Le fichier n'est pas un PDF.".to_string());
+        }
+        let doc = lopdf::Document::load(&file_path)
+            .map_err(|e| format!("Impossible de lire le PDF: {}", e))?;
+        Ok(doc.get_pages().len() as u32)
+    })
+    .await
+    .map_err(|e| format!("Erreur d'exécution asynchrone: {}", e))?
 }
 
 /// Retourne le nombre de pages de plusieurs fichiers PDF en un seul appel (optimisation).
 #[tauri::command]
-fn get_pdf_page_counts(file_paths: Vec<String>) -> Result<std::collections::HashMap<String, u32>, String> {
-    let mut counts = std::collections::HashMap::new();
-    for path in file_paths {
-        if path.to_lowercase().ends_with(".pdf") {
-            if let Ok(doc) = lopdf::Document::load(&path) {
-                counts.insert(path, doc.get_pages().len() as u32);
+async fn get_pdf_page_counts(file_paths: Vec<String>) -> Result<std::collections::HashMap<String, u32>, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut counts = std::collections::HashMap::new();
+        for path in file_paths {
+            if path.to_lowercase().ends_with(".pdf") {
+                if let Ok(doc) = lopdf::Document::load(&path) {
+                    counts.insert(path, doc.get_pages().len() as u32);
+                }
             }
         }
-    }
-    Ok(counts)
+        Ok(counts)
+    })
+    .await
+    .map_err(|e| format!("Erreur d'exécution asynchrone: {}", e))?
 }
 
 // ============================================================
@@ -783,110 +808,118 @@ fn remap_object_refs(
 /// Fusionne plusieurs fichiers PDF en un seul fichier temporaire.
 /// Retourne le chemin du fichier fusionné.
 #[tauri::command]
-fn merge_pdfs(paths: Vec<String>) -> Result<String, String> {
-    use std::collections::BTreeMap;
+async fn merge_pdfs(paths: Vec<String>) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        use std::collections::BTreeMap;
 
-    if paths.is_empty() {
-        return Err("Aucun fichier PDF à fusionner.".to_string());
-    }
-
-    // Filtrer uniquement les PDF
-    let pdf_paths: Vec<&String> = paths
-        .iter()
-        .filter(|p| p.to_lowercase().ends_with(".pdf"))
-        .collect();
-
-    if pdf_paths.is_empty() {
-        return Err("Aucun fichier PDF trouvé dans la liste.".to_string());
-    }
-
-    if pdf_paths.len() == 1 {
-        return Ok(pdf_paths[0].clone());
-    }
-
-    // Charger le premier document comme base
-    let mut merged_doc = lopdf::Document::load(&pdf_paths[0])
-        .map_err(|e| format!("Erreur lecture du PDF '{}': {}", pdf_paths[0], e))?;
-
-    // Pour chaque PDF suivant, copier tous les objets avec des IDs remappés
-    for pdf_path in &pdf_paths[1..] {
-        let doc = lopdf::Document::load(pdf_path)
-            .map_err(|e| format!("Erreur lecture du PDF '{}': {}", pdf_path, e))?;
-
-        // Calculer l'offset pour éviter les conflits d'ID
-        let max_id = merged_doc
-            .objects
-            .keys()
-            .map(|(id, _)| *id)
-            .max()
-            .unwrap_or(0);
-
-        // Créer la table de correspondance des IDs
-        let mut id_map: BTreeMap<lopdf::ObjectId, lopdf::ObjectId> = BTreeMap::new();
-        for old_id in doc.objects.keys() {
-            let new_id = (old_id.0 + max_id + 1, old_id.1);
-            id_map.insert(*old_id, new_id);
+        if paths.is_empty() {
+            return Err("Aucun fichier PDF à fusionner.".to_string());
         }
 
-        // Copier tous les objets avec les références remappées
-        for (old_id, obj) in &doc.objects {
-            let new_id = id_map[old_id];
-            let remapped = remap_object_refs(obj, &id_map);
-            merged_doc.objects.insert(new_id, remapped);
+        // Filtrer uniquement les PDF
+        let pdf_paths: Vec<&String> = paths
+            .iter()
+            .filter(|p| p.to_lowercase().ends_with(".pdf"))
+            .collect();
+
+        if pdf_paths.is_empty() {
+            return Err("Aucun fichier PDF trouvé dans la liste.".to_string());
         }
 
-        // Trouver les pages du document source et les ajouter au Pages tree du document fusionné
-        let source_pages = doc.get_pages();
-        let mut sorted_pages: Vec<_> = source_pages.into_iter().collect();
-        sorted_pages.sort_by_key(|(num, _)| *num);
+        if pdf_paths.len() == 1 {
+            return Ok(pdf_paths[0].clone());
+        }
 
-        // Récupérer le Pages ID du document fusionné via le catalog
-        let pages_id = {
-            let cat_dict = merged_doc
-                .catalog()
-                .map_err(|e| format!("Erreur catalog: {}", e))?;
-            match cat_dict.get(b"Pages") {
-                Ok(lopdf::Object::Reference(pages_ref)) => *pages_ref,
-                _ => return Err("Structure PDF invalide: 'Pages' introuvable dans le catalog.".to_string()),
+        // Charger le premier document comme base
+        let mut merged_doc = lopdf::Document::load(&pdf_paths[0])
+            .map_err(|e| format!("Erreur lecture du PDF '{}': {}", pdf_paths[0], e))?;
+
+        // Pour chaque PDF suivant, copier tous les objets avec des IDs remappés
+        for pdf_path in &pdf_paths[1..] {
+            let doc = lopdf::Document::load(pdf_path)
+                .map_err(|e| format!("Erreur lecture du PDF '{}': {}", pdf_path, e))?;
+
+            // Calculer l'offset pour éviter les conflits d'ID
+            let max_id = merged_doc
+                .objects
+                .keys()
+                .map(|(id, _)| *id)
+                .max()
+                .unwrap_or(0);
+
+            // Créer la table de correspondance des IDs
+            let mut id_map: BTreeMap<lopdf::ObjectId, lopdf::ObjectId> = BTreeMap::new();
+            for old_id in doc.objects.keys() {
+                let new_id = (old_id.0 + max_id + 1, old_id.1);
+                id_map.insert(*old_id, new_id);
             }
-        };
 
-        // Ajouter chaque page source au Kids array du Pages dict fusionné
-        for (_page_num, old_page_id) in &sorted_pages {
-            let new_page_id = id_map
-                .get(old_page_id)
-                .ok_or_else(|| "Erreur de remapping d'ID de page.".to_string())?;
-
-            // Mettre à jour le Parent de la page pour pointer vers le Pages du document fusionné
-            if let Ok(lopdf::Object::Dictionary(ref mut page_dict)) =
-                merged_doc.get_object_mut(*new_page_id)
-            {
-                page_dict.set("Parent", lopdf::Object::Reference(pages_id));
+            // Copier tous les objets avec les références remappées
+            for (old_id, obj) in &doc.objects {
+                let new_id = id_map[old_id];
+                let remapped = remap_object_refs(obj, &id_map);
+                merged_doc.objects.insert(new_id, remapped);
             }
 
-            // Ajouter au Kids array
-            if let Ok(lopdf::Object::Dictionary(ref mut pages_dict)) =
-                merged_doc.get_object_mut(pages_id)
-            {
-                if let Ok(lopdf::Object::Array(ref mut kids)) = pages_dict.get_mut(b"Kids") {
-                    kids.push(lopdf::Object::Reference(*new_page_id));
+            // Trouver les pages du document source et les ajouter au Pages tree du document fusionné
+            let source_pages = doc.get_pages();
+            let mut sorted_pages: Vec<_> = source_pages.into_iter().collect();
+            sorted_pages.sort_by_key(|(num, _)| *num);
+
+            // Récupérer le Pages ID du document fusionné via le catalog
+            let pages_id = {
+                let cat_dict = merged_doc
+                    .catalog()
+                    .map_err(|e| format!("Erreur catalog: {}", e))?;
+                match cat_dict.get(b"Pages") {
+                    Ok(lopdf::Object::Reference(pages_ref)) => *pages_ref,
+                    _ => return Err("Structure PDF invalide: 'Pages' introuvable dans le catalog.".to_string()),
                 }
-                // Mettre à jour le Count
-                if let Ok(lopdf::Object::Integer(ref mut count)) = pages_dict.get_mut(b"Count") {
-                    *count += 1;
+            };
+
+            // Ajouter chaque page source au Kids array du Pages dict fusionné
+            for (_page_num, old_page_id) in &sorted_pages {
+                let new_page_id = id_map
+                    .get(old_page_id)
+                    .ok_or_else(|| "Erreur de remapping d'ID de page.".to_string())?;
+
+                // Mettre à jour le Parent de la page pour pointer vers le Pages du document fusionné
+                if let Ok(lopdf::Object::Dictionary(ref mut page_dict)) =
+                    merged_doc.get_object_mut(*new_page_id)
+                {
+                    page_dict.set("Parent", lopdf::Object::Reference(pages_id));
+                }
+
+                // Ajouter au Kids array
+                if let Ok(lopdf::Object::Dictionary(ref mut pages_dict)) =
+                    merged_doc.get_object_mut(pages_id)
+                {
+                    if let Ok(lopdf::Object::Array(ref mut kids)) = pages_dict.get_mut(b"Kids") {
+                        kids.push(lopdf::Object::Reference(*new_page_id));
+                    }
+                    // Mettre à jour le Count
+                    if let Ok(lopdf::Object::Integer(ref mut count)) = pages_dict.get_mut(b"Count") {
+                        *count += 1;
+                    }
                 }
             }
         }
-    }
 
-    // Sauvegarder le fichier fusionné dans un fichier temporaire
-    let temp_dir = std::env::temp_dir();
-    let output_path = temp_dir.join("tauriprint_merged.pdf");
-    merged_doc
-        .save(&output_path)
-        .map_err(|e| format!("Erreur lors de la sauvegarde du PDF fusionné: {}", e))?;
+        // Sauvegarder le fichier fusionné dans un fichier temporaire
+        let temp_dir = std::env::temp_dir();
+        let output_path = temp_dir.join("tauriprint_merged.pdf");
+        merged_doc
+            .save(&output_path)
+            .map_err(|e| format!("Erreur lors de la sauvegarde du PDF fusionné: {}", e))?;
 
-    Ok(output_path.to_string_lossy().into_owned())
+        if let Some(path_str) = output_path.to_str() {
+            Ok(path_str.to_string())
+        } else {
+            Err("Chemin invalide généré pour la fusion.".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("Erreur d'exécution asynchrone: {}", e))?
 }
 
 // ============================================================
@@ -1038,6 +1071,33 @@ fn get_app_version(app_handle: tauri::AppHandle) -> String {
     app_handle.package_info().version.to_string()
 }
 
+/// Applique les paramètres proxy pour les mises à jour et requêtes HTTP.
+#[tauri::command]
+fn apply_proxy(mode: String, url: String) -> Result<(), String> {
+    match mode.as_str() {
+        "manual" => {
+            std::env::set_var("HTTP_PROXY", &url);
+            std::env::set_var("HTTPS_PROXY", &url);
+            std::env::set_var("ALL_PROXY", &url);
+            std::env::remove_var("NO_PROXY");
+        },
+        "none" => {
+            std::env::set_var("NO_PROXY", "*");
+            std::env::remove_var("HTTP_PROXY");
+            std::env::remove_var("HTTPS_PROXY");
+            std::env::remove_var("ALL_PROXY");
+        },
+        _ => { // system (default)
+            std::env::remove_var("HTTP_PROXY");
+            std::env::remove_var("HTTPS_PROXY");
+            std::env::remove_var("ALL_PROXY");
+            std::env::remove_var("NO_PROXY");
+        }
+    }
+    Ok(())
+}
+
+
 
 // ============================================================
 // Point d'entrée Tauri
@@ -1050,8 +1110,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(HotFolderState(Mutex::new(None)))
-        .manage(PrintQueueState { queue: Mutex::new(Vec::new()), is_paused: Mutex::new(false), is_running: Mutex::new(false) })
+        .manage(HotFolderState(std::sync::Mutex::new(None)))
+        .manage(PrintQueueState { 
+            data: std::sync::Mutex::new(QueueData { items: Vec::new(), is_running: false, is_paused: false }), 
+            notify: std::sync::Arc::new(tokio::sync::Notify::new()) 
+        })
         .invoke_handler(tauri::generate_handler![
             get_printers,
             print_file,
@@ -1074,7 +1137,8 @@ pub fn run() {
             cancel_queue_item,
             reorder_queue,
             open_printer_properties,
-            append_log
+            append_log,
+            apply_proxy
         ])
         .run(tauri::generate_context!())
         .expect("Erreur fatale lors du lancement de l'application Tauri");

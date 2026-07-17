@@ -13,6 +13,7 @@ import {
 
 // Éléments du DOM (Principaux)
 const printerSelect = document.getElementById("printer-select") as HTMLSelectElement;
+const printerStatusBadge = document.getElementById("printer-status-badge") as HTMLSpanElement;
 const dropZone = document.getElementById("drop-zone") as HTMLDivElement;
 const fileList = document.getElementById("file-list") as HTMLUListElement;
 const printBtn = document.getElementById("print-btn") as HTMLButtonElement;
@@ -68,7 +69,19 @@ const fsOptDuplex = document.getElementById("fs-opt-duplex") as HTMLSelectElemen
 const fsOptPageRange = document.getElementById("fs-opt-page-range") as HTMLInputElement;
 const fsModalResetBtn = document.getElementById("fs-modal-reset-btn") as HTMLButtonElement;
 const fsModalSaveBtn = document.getElementById("fs-modal-save-btn") as HTMLButtonElement;
+const fsOptExcludeBlankPages = document.getElementById("fs-opt-exclude-blank-pages") as HTMLInputElement;
 let currentSettingsIndex = -1;
+
+// Éléments du DOM (Pré-opérations)
+const preopTypeSelect = document.getElementById("preop-type-select") as HTMLSelectElement;
+const preopAddBtn = document.getElementById("preop-add-btn") as HTMLButtonElement;
+const preopUpBtn = document.getElementById("preop-up-btn") as HTMLButtonElement;
+const preopDownBtn = document.getElementById("preop-down-btn") as HTMLButtonElement;
+const preopDeleteBtn = document.getElementById("preop-delete-btn") as HTMLButtonElement;
+const preopList = document.getElementById("preop-list") as HTMLUListElement;
+const preopEmptyMsg = document.getElementById("preop-empty-msg") as HTMLDivElement;
+let preopItems: string[] = [];
+let selectedPreopIndex = -1;
 
 // Éléments du DOM (Phase 2 — Nouveautés)
 const fileCountBadge = document.getElementById("file-count") as HTMLSpanElement;
@@ -93,6 +106,11 @@ const settingsCloseBtn = document.getElementById("settings-close-btn") as HTMLBu
 const printerPropertiesBtn = document.getElementById("printer-properties-btn") as HTMLButtonElement;
 const settingLogMode = document.getElementById("setting-log-mode") as HTMLInputElement;
 const settingCompatMode = document.getElementById("setting-compat-mode") as HTMLInputElement;
+
+const settingProxyMode = document.getElementById("setting-proxy-mode") as HTMLSelectElement;
+const settingProxyUrl = document.getElementById("setting-proxy-url") as HTMLInputElement;
+const proxyManualConfig = document.getElementById("proxy-manual-config") as HTMLDivElement;
+
 const settingsTabBtns = document.querySelectorAll(".settings-tab-btn");
 const settingsTabs = document.querySelectorAll(".settings-tab");
 
@@ -154,6 +172,7 @@ interface PrintOptionsPayload {
   print_as_image: boolean;
   stapling: string;
   punching: string;
+  exclude_blank_pages: boolean;
 }
 
 // ============================================================
@@ -473,6 +492,7 @@ function openFileSettings(index: number) {
   fsOptColor.value = item.options?.color !== undefined ? item.options.color.toString() : currentGlobal.color.toString();
   fsOptDuplex.value = item.options?.duplex || currentGlobal.duplex;
   fsOptPageRange.value = item.options?.page_range || currentGlobal.page_range;
+  fsOptExcludeBlankPages.checked = item.options?.exclude_blank_pages !== undefined ? item.options.exclude_blank_pages : currentGlobal.exclude_blank_pages;
 
   fsModal.classList.remove("hidden");
   setTimeout(() => {
@@ -510,15 +530,79 @@ fsModalSaveBtn.addEventListener("click", () => {
       return;
     }
     filesToPrint[currentSettingsIndex].options = {
+      ...filesToPrint[currentSettingsIndex].options,
       copies: copies,
       color: fsOptColor.value === "true",
       duplex: fsOptDuplex.value,
-      page_range: range
+      page_range: range,
+      exclude_blank_pages: fsOptExcludeBlankPages.checked
     };
     renderFileList();
     closeFileSettings();
   }
 });
+
+function renderPreopList() {
+  if (preopItems.length === 0) {
+    preopList.innerHTML = "";
+    preopList.appendChild(preopEmptyMsg);
+    preopEmptyMsg.classList.remove("hidden");
+  } else {
+    preopList.innerHTML = "";
+    preopItems.forEach((op, idx) => {
+      const li = document.createElement("li");
+      li.className = `p-2 rounded-lg cursor-pointer border ${selectedPreopIndex === idx ? 'bg-blue-100 border-blue-400 dark:bg-blue-900/40 dark:border-blue-500' : 'bg-white border-slate-200 dark:bg-slate-700 dark:border-slate-600'} text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors`;
+      let text = "";
+      if (op === "watermark") text = "Ajouter un filigrane";
+      if (op === "merge") text = "Fusionner les documents";
+      if (op === "slip_sheet") text = "Insérer une page de garde";
+      li.textContent = text;
+      li.onclick = () => {
+        selectedPreopIndex = idx;
+        renderPreopList();
+      };
+      preopList.appendChild(li);
+    });
+  }
+}
+
+if (preopAddBtn) {
+  preopAddBtn.addEventListener("click", () => {
+    preopItems.push(preopTypeSelect.value);
+    selectedPreopIndex = preopItems.length - 1;
+    renderPreopList();
+  });
+}
+if (preopDeleteBtn) {
+  preopDeleteBtn.addEventListener("click", () => {
+    if (selectedPreopIndex >= 0 && selectedPreopIndex < preopItems.length) {
+      preopItems.splice(selectedPreopIndex, 1);
+      selectedPreopIndex = -1;
+      renderPreopList();
+    }
+  });
+}
+if (preopUpBtn) {
+  preopUpBtn.addEventListener("click", () => {
+    if (selectedPreopIndex > 0) {
+      const item = preopItems.splice(selectedPreopIndex, 1)[0];
+      selectedPreopIndex--;
+      preopItems.splice(selectedPreopIndex, 0, item);
+      renderPreopList();
+    }
+  });
+}
+if (preopDownBtn) {
+  preopDownBtn.addEventListener("click", () => {
+    if (selectedPreopIndex >= 0 && selectedPreopIndex < preopItems.length - 1) {
+      const item = preopItems.splice(selectedPreopIndex, 1)[0];
+      selectedPreopIndex++;
+      preopItems.splice(selectedPreopIndex, 0, item);
+      renderPreopList();
+    }
+  });
+}
+
 
 function sortFilesAlphabetically() {
   filesToPrint.sort((a, b) => {
@@ -641,6 +725,7 @@ function getCurrentOptions(): PrintOptionsPayload {
     print_as_image: (document.getElementById("setting-print-as-image") as HTMLInputElement)?.checked ?? false,
     stapling: (document.getElementById("setting-stapling") as HTMLSelectElement)?.value || "none",
     punching: (document.getElementById("setting-punching") as HTMLSelectElement)?.value || "none",
+    exclude_blank_pages: (document.getElementById("opt-exclude-blank-pages") as HTMLInputElement)?.checked ?? false,
   };
 }
 
@@ -827,7 +912,7 @@ async function startPrinting() {
 
 hotFolderSelectBtn.addEventListener("click", async () => {
   try {
-    const folderPath: string = await invoke("select_folder_dialog");
+    const folderPath: string | null = await open({ directory: true, multiple: false }) as string | null;
     if (folderPath) {
       statusMessage.textContent = "Démarrage de la surveillance...";
       const result: string = await invoke("start_hot_folder", { folderPath });
@@ -938,6 +1023,19 @@ async function setupHotFolderListener() {
 function loadSettings() {
   settingLogMode.checked = localStorage.getItem("logMode") === "true";
   settingCompatMode.checked = localStorage.getItem("compatMode") === "true";
+
+  const proxyMode = localStorage.getItem("proxyMode") || "system";
+  if (settingProxyMode) settingProxyMode.value = proxyMode;
+  if (settingProxyUrl) settingProxyUrl.value = localStorage.getItem("proxyUrl") || "";
+  
+  if (proxyMode === "manual") {
+    proxyManualConfig?.classList.remove("hidden");
+  } else {
+    proxyManualConfig?.classList.add("hidden");
+  }
+
+  // Appliquer le proxy au démarrage
+  invoke("apply_proxy", { mode: proxyMode, url: settingProxyUrl ? settingProxyUrl.value : "" }).catch(console.error);
 }
 
 settingLogMode.addEventListener("change", () => {
@@ -947,6 +1045,28 @@ settingLogMode.addEventListener("change", () => {
 settingCompatMode.addEventListener("change", () => {
   localStorage.setItem("compatMode", settingCompatMode.checked.toString());
 });
+
+if (settingProxyMode) {
+  settingProxyMode.addEventListener("change", () => {
+    const mode = settingProxyMode.value;
+    localStorage.setItem("proxyMode", mode);
+    if (mode === "manual") {
+      proxyManualConfig.classList.remove("hidden");
+    } else {
+      proxyManualConfig.classList.add("hidden");
+    }
+    invoke("apply_proxy", { mode, url: settingProxyUrl.value }).catch(console.error);
+  });
+}
+
+if (settingProxyUrl) {
+  settingProxyUrl.addEventListener("input", () => {
+    localStorage.setItem("proxyUrl", settingProxyUrl.value);
+    if (settingProxyMode.value === "manual") {
+      invoke("apply_proxy", { mode: "manual", url: settingProxyUrl.value }).catch(console.error);
+    }
+  });
+}
 
 printerPropertiesBtn.addEventListener("click", async () => {
   if (!printerSelect.value) {
@@ -1063,6 +1183,32 @@ window.addEventListener("DOMContentLoaded", () => {
   setupTauriDragDrop();
   setupHotFolderListener();
   loadAppVersion();
+  
+  // NOUVEAU: Écouteur pour le statut de l'imprimante (Vérificateur Live)
+  listen("printer-status-changed", (event: any) => {
+    if (!printerStatusBadge) return;
+    const { status, connected } = event.payload;
+    printerStatusBadge.classList.remove("hidden", "bg-green-100", "text-green-700", "border-green-200", "bg-red-100", "text-red-700", "border-red-200");
+    if (connected) {
+      printerStatusBadge.classList.add("bg-green-100", "text-green-700", "border-green-200");
+      printerStatusBadge.innerHTML = `🟢 ${status}`;
+    } else {
+      printerStatusBadge.classList.add("bg-red-100", "text-red-700", "border-red-200");
+      printerStatusBadge.innerHTML = `🔴 ${status}`;
+    }
+  });
+});
+
+printerSelect.addEventListener("change", async () => {
+  if (printerStatusBadge) {
+    printerStatusBadge.classList.add("hidden");
+  }
+  const selected = printerSelect.value;
+  if (selected) {
+    try {
+      await invoke("start_printer_monitor", { printer: selected });
+    } catch(e) { console.error(e); }
+  }
 });
 
 sortBtn.addEventListener("click", sortFilesAlphabetically);
@@ -1154,12 +1300,18 @@ let analyticsChart: any = null;
 async function loadAnalytics() {
   try {
     const data = await invoke<any>("get_analytics");
-    statTotalPages.textContent = data.total_pages.toString();
-    statSuccess.textContent = data.total_success.toString();
-    statErrors.textContent = data.total_errors.toString();
+    statTotalPages.textContent = data.total_pages_printed.toString();
+    statSuccess.textContent = data.success_count.toString();
+    statErrors.textContent = data.error_count.toString();
 
-    const printers = Object.keys(data.printers);
-    const usages = Object.values(data.printers);
+    // Ajout info écologie si présent
+    if (data.duplex_count !== undefined) {
+      statSuccess.innerHTML = `${data.success_count} <span class="text-xs font-normal opacity-75">(${data.duplex_count} R/V)</span>`;
+      statTotalPages.innerHTML = `${data.total_pages_printed} <span class="text-xs font-normal opacity-75">(${data.total_sheets_saved} feuilles sauvées)</span>`;
+    }
+
+    const printers = Object.keys(data.printers_used);
+    const usages = Object.values(data.printers_used);
 
     const ctx = document.getElementById('analyticsChart') as HTMLCanvasElement;
     if (analyticsChart) analyticsChart.destroy();
