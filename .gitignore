@@ -8,3 +8,8 @@ code_map.md
 # Ruflo generated rules, agents and skills
 .claude/
 CLAUDE.md
+
+# Graphify
+graphify-out/
+.graphify/
+.graphify_*

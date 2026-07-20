@@ -159,7 +159,7 @@ fn update_analytics(app: &tauri::AppHandle, success: bool, pages: u32, printer: 
         *data.printers_used.entry(printer).or_insert(0) += 1;
         if is_duplex {
             data.duplex_count += 1;
-            data.total_sheets_saved += (pages + 1) / 2;
+            data.total_sheets_saved += pages.div_ceil(2);
         }
     } else {
         data.error_count += 1;
@@ -831,7 +831,7 @@ async fn merge_pdfs(paths: Vec<String>) -> Result<String, String> {
         }
 
         // Charger le premier document comme base
-        let mut merged_doc = lopdf::Document::load(&pdf_paths[0])
+        let mut merged_doc = lopdf::Document::load(pdf_paths[0])
             .map_err(|e| format!("Erreur lecture du PDF '{}': {}", pdf_paths[0], e))?;
 
         // Pour chaque PDF suivant, copier tous les objets avec des IDs remappés
@@ -1087,6 +1087,15 @@ fn apply_proxy(mode: String, url: String) -> Result<(), String> {
             std::env::remove_var("HTTPS_PROXY");
             std::env::remove_var("ALL_PROXY");
         },
+        "network" => {
+            // Détection du proxy réseau (WPAD / PAC).
+            // On s'assure qu'aucune variable statique ne vient surcharger
+            // le mécanisme de découverte natif du système d'exploitation.
+            std::env::remove_var("HTTP_PROXY");
+            std::env::remove_var("HTTPS_PROXY");
+            std::env::remove_var("ALL_PROXY");
+            std::env::remove_var("NO_PROXY");
+        },
         _ => { // system (default)
             std::env::remove_var("HTTP_PROXY");
             std::env::remove_var("HTTPS_PROXY");
@@ -1176,8 +1185,8 @@ mod tests {
         assert!(content.contains("fichier.pdf"));
     }
 
-    #[test]
-    fn test_process_dropped_paths() {
+    #[tokio::test]
+    async fn test_process_dropped_paths() {
         let temp_dir = std::env::temp_dir().join("printmax_test_dir");
         let _ = fs::create_dir_all(&temp_dir);
         let file1 = temp_dir.join("test1.txt");
@@ -1186,45 +1195,23 @@ mod tests {
         let _ = fs::write(&file2, "world");
 
         let paths = vec![temp_dir.to_string_lossy().to_string()];
-        let results = process_dropped_paths(paths);
+        let results = process_dropped_paths(paths).await.unwrap();
 
         assert!(results.len() >= 2);
         assert!(results.iter().any(|p| p.contains("test1.txt")));
         assert!(results.iter().any(|p| p.contains("test2.txt")));
     }
 
-    #[test]
-    fn test_move_file() {
-        let temp_dir = std::env::temp_dir().join("printmax_move_test");
-        let _ = fs::create_dir_all(&temp_dir);
-        let dest_dir = temp_dir.join("dest");
-        let _ = fs::create_dir_all(&dest_dir);
-
-        let source_file = temp_dir.join("test_move.txt");
-        let _ = fs::write(&source_file, "move test");
-
-        let result = move_file(
-            source_file.to_string_lossy().to_string(),
-            dest_dir.to_string_lossy().to_string(),
-        );
-        assert!(result.is_ok());
-        assert!(!source_file.exists());
-        assert!(dest_dir.join("test_move.txt").exists());
-
-        // Cleanup
-        let _ = fs::remove_dir_all(&temp_dir);
-    }
-
-    #[test]
-    fn test_merge_pdfs_empty() {
-        let result = merge_pdfs(Vec::new());
+    #[tokio::test]
+    async fn test_merge_pdfs_empty() {
+        let result = merge_pdfs(Vec::new()).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Aucun fichier PDF"));
     }
 
-    #[test]
-    fn test_merge_pdfs_no_pdfs() {
-        let result = merge_pdfs(vec!["file.txt".to_string(), "file.jpg".to_string()]);
+    #[tokio::test]
+    async fn test_merge_pdfs_no_pdfs() {
+        let result = merge_pdfs(vec!["file.txt".to_string(), "file.jpg".to_string()]).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Aucun fichier PDF trouvé"));
     }

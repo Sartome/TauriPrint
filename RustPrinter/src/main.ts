@@ -107,7 +107,7 @@ const printerPropertiesBtn = document.getElementById("printer-properties-btn") a
 const settingLogMode = document.getElementById("setting-log-mode") as HTMLInputElement;
 const settingCompatMode = document.getElementById("setting-compat-mode") as HTMLInputElement;
 
-const settingProxyMode = document.getElementById("setting-proxy-mode") as HTMLSelectElement;
+const proxyModeRadios = document.querySelectorAll('input[name="proxy_mode"]') as NodeListOf<HTMLInputElement>;
 const settingProxyUrl = document.getElementById("setting-proxy-url") as HTMLInputElement;
 const proxyManualConfig = document.getElementById("proxy-manual-config") as HTMLDivElement;
 
@@ -1025,7 +1025,11 @@ function loadSettings() {
   settingCompatMode.checked = localStorage.getItem("compatMode") === "true";
 
   const proxyMode = localStorage.getItem("proxyMode") || "system";
-  if (settingProxyMode) settingProxyMode.value = proxyMode;
+  if (proxyModeRadios.length > 0) {
+    proxyModeRadios.forEach(radio => {
+      radio.checked = radio.value === proxyMode;
+    });
+  }
   if (settingProxyUrl) settingProxyUrl.value = localStorage.getItem("proxyUrl") || "";
   
   if (proxyMode === "manual") {
@@ -1046,23 +1050,28 @@ settingCompatMode.addEventListener("change", () => {
   localStorage.setItem("compatMode", settingCompatMode.checked.toString());
 });
 
-if (settingProxyMode) {
-  settingProxyMode.addEventListener("change", () => {
-    const mode = settingProxyMode.value;
-    localStorage.setItem("proxyMode", mode);
-    if (mode === "manual") {
-      proxyManualConfig.classList.remove("hidden");
-    } else {
-      proxyManualConfig.classList.add("hidden");
-    }
-    invoke("apply_proxy", { mode, url: settingProxyUrl.value }).catch(console.error);
+if (proxyModeRadios.length > 0) {
+  proxyModeRadios.forEach(radio => {
+    radio.addEventListener("change", () => {
+      if (radio.checked) {
+        const mode = radio.value;
+        localStorage.setItem("proxyMode", mode);
+        if (mode === "manual") {
+          proxyManualConfig.classList.remove("hidden");
+        } else {
+          proxyManualConfig.classList.add("hidden");
+        }
+        invoke("apply_proxy", { mode, url: settingProxyUrl.value }).catch(console.error);
+      }
+    });
   });
 }
 
 if (settingProxyUrl) {
   settingProxyUrl.addEventListener("input", () => {
     localStorage.setItem("proxyUrl", settingProxyUrl.value);
-    if (settingProxyMode.value === "manual") {
+    const selectedRadio = document.querySelector('input[name="proxy_mode"]:checked') as HTMLInputElement;
+    if (selectedRadio && selectedRadio.value === "manual") {
       invoke("apply_proxy", { mode: "manual", url: settingProxyUrl.value }).catch(console.error);
     }
   });
