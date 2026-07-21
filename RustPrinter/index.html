@@ -13,28 +13,28 @@
   <body class="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans h-screen w-screen flex flex-col overflow-hidden transition-colors duration-500">
     
     <!-- Titlebar / Header -->
-    <header data-tauri-drag-region class="glass-panel flex-none h-14 border-b border-zinc-200 dark:border-white/10 flex justify-between items-center px-4 shadow-sm z-10">
-      <div class="flex items-center gap-3 pointer-events-none">
-        <img src="/TauriPrint.png" alt="TauriPrint Logo" class="h-8 w-auto object-contain">
-        <h1 class="text-lg font-bold tracking-tight text-zinc-800 dark:text-zinc-100">
+    <header data-tauri-drag-region class="glass-panel flex-none h-12 border-b border-zinc-200 dark:border-white/[0.06] flex justify-between items-center px-4 z-10">
+      <div class="flex items-center gap-2.5 pointer-events-none">
+        <img src="/TauriPrint.png" alt="TauriPrint Logo" class="h-7 w-auto object-contain">
+        <h1 class="text-sm font-bold tracking-tight text-zinc-800 dark:text-zinc-100">
           TauriPrint
         </h1>
-        <span id="app-version" class="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-xs font-medium text-zinc-600 dark:text-zinc-400 border border-zinc-300 dark:border-zinc-700">v0.0.0</span>
+        <span id="app-version" class="px-1.5 py-0.5 rounded-md bg-zinc-200/80 dark:bg-zinc-800 text-[10px] font-medium text-zinc-500 dark:text-zinc-500 border border-zinc-300/50 dark:border-zinc-700/50">v0.0.0</span>
       </div>
       
-      <div class="flex items-center gap-1.5 z-20">
-        <button id="update-btn" class="hidden text-xs font-semibold px-3 py-1.5 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-500/30 transition-colors focus-ring">
+      <div class="flex items-center gap-1 z-20">
+        <button id="update-btn" class="btn-accent-soft px-2.5 py-1 text-[11px] font-semibold rounded-md focus-ring">
           Mise à jour
         </button>
-        <button id="dashboard-btn" class="p-2 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-ring" title="Tableau de bord">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+        <button id="dashboard-btn" class="btn-icon focus-ring" title="Tableau de bord">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
         </button>
-        <button id="settings-btn" class="p-2 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-ring" title="Paramètres">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <button id="settings-btn" class="btn-icon focus-ring" title="Paramètres">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         </button>
-        <button id="theme-toggle" class="p-2 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-ring">
-          <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-          <svg id="sun-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+        <button id="theme-toggle" class="btn-icon focus-ring">
+          <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+          <svg id="sun-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
         </button>
       </div>
     </header>
@@ -43,92 +43,92 @@
     <main class="flex-1 flex overflow-hidden">
       
       <!-- Left Panel: Printer Settings -->
-      <aside class="w-80 border-r border-zinc-200 dark:border-white/10 bg-white/50 dark:bg-zinc-900/50 flex flex-col z-0">
-        <div class="flex-1 overflow-y-auto p-5 space-y-6">
+      <aside class="w-72 border-r border-zinc-200 dark:border-white/[0.06] bg-white/60 dark:bg-zinc-900/40 flex flex-col z-0">
+        <div class="flex-1 overflow-y-auto p-4 space-y-5">
           
           <!-- Printer Select -->
-          <div class="space-y-2">
+          <div class="space-y-1.5">
             <div class="flex justify-between items-center">
-              <label for="printer-select" class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Imprimante</label>
-              <span id="printer-status-badge" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-md border uppercase tracking-wider"></span>
+              <label for="printer-select" class="section-heading">Imprimante</label>
+              <span id="printer-status-badge" class="hidden px-1.5 py-0.5 text-[10px] font-bold rounded-md border uppercase tracking-wider"></span>
             </div>
-            <div class="flex gap-2">
-              <select id="printer-select" class="flex-1 w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm focus-ring truncate transition-colors">
+            <div class="flex gap-1.5">
+              <select id="printer-select" class="input-field flex-1 truncate">
                 <option value="">Chargement...</option>
               </select>
-              <button id="printer-properties-btn" class="p-2 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors focus-ring" title="Propriétés système">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-zinc-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
+              <button id="printer-properties-btn" class="p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors focus-ring" title="Propriétés système">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-zinc-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
               </button>
             </div>
           </div>
 
           <!-- Profiles -->
-          <div class="p-3 bg-zinc-100 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700/50 flex flex-col gap-2">
-            <label class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Profil d'impression</label>
-            <div class="flex gap-2">
-              <select id="profile-select" class="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-sm focus-ring">
+          <div class="card-surface p-3 flex flex-col gap-1.5">
+            <label class="section-label">Profil d'impression</label>
+            <div class="flex gap-1.5">
+              <select id="profile-select" class="input-field flex-1">
                 <option value="default">Par défaut</option>
               </select>
-              <button id="save-profile-btn" class="px-3 py-1.5 bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 font-medium text-xs rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors focus-ring">
+              <button id="save-profile-btn" class="btn-accent-soft px-2.5 py-1.5 focus-ring">
                 Sauver
               </button>
             </div>
           </div>
 
-          <!-- Options toggle button (we keep it for logic, but maybe always show options? Actually, logic might hide/show panel. Let's wrap options in the panel) -->
+          <!-- Options toggle -->
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Paramètres rapides</h3>
-            <button id="toggle-options-btn" class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Afficher/Masquer</button>
+            <h3 class="section-heading">Paramètres rapides</h3>
+            <button id="toggle-options-btn" class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline underline-offset-2">Afficher/Masquer</button>
           </div>
 
           <div id="options-panel" class="space-y-4">
             
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-2 gap-2.5">
               <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Copies</label>
-                <input type="number" id="opt-copies" min="1" max="99" value="1" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm focus-ring text-center font-medium">
+                <label class="section-label">Copies</label>
+                <input type="number" id="opt-copies" min="1" max="99" value="1" class="input-field text-center font-medium">
               </div>
               <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Couleur</label>
-                <select id="opt-color" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-sm focus-ring">
+                <label class="section-label">Couleur</label>
+                <select id="opt-color" class="input-field">
                   <option value="true">Couleur</option>
                   <option value="false">N&B</option>
                 </select>
               </div>
               <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Format</label>
-                <select id="opt-paper" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-sm focus-ring">
+                <label class="section-label">Format</label>
+                <select id="opt-paper" class="input-field">
                   <option value="A4">A4</option>
                   <option value="A3">A3</option>
                   <option value="Letter">Letter</option>
                 </select>
               </div>
               <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Orientation</label>
-                <select id="opt-orientation" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-sm focus-ring">
+                <label class="section-label">Orientation</label>
+                <select id="opt-orientation" class="input-field">
                   <option value="portrait">Portrait</option>
                   <option value="landscape">Paysage</option>
                 </select>
               </div>
               <div class="space-y-1 col-span-2">
-                <label class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Recto-Verso</label>
-                <select id="opt-duplex" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm focus-ring">
+                <label class="section-label">Recto-Verso</label>
+                <select id="opt-duplex" class="input-field">
                   <option value="OneSided">Simple face</option>
                   <option value="TwoSidedLongEdge">Bord long</option>
                   <option value="TwoSidedShortEdge">Bord court</option>
                 </select>
               </div>
               <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Source</label>
-                <select id="opt-paper-source" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-sm focus-ring">
+                <label class="section-label">Source</label>
+                <select id="opt-paper-source" class="input-field">
                   <option value="auto">Auto</option>
                   <option value="tray1">Bac 1</option>
                   <option value="tray2">Bac 2</option>
                 </select>
               </div>
               <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Type papier</label>
-                <select id="opt-paper-type" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-sm focus-ring">
+                <label class="section-label">Type papier</label>
+                <select id="opt-paper-type" class="input-field">
                   <option value="plain">Normal</option>
                   <option value="thick">Épais</option>
                   <option value="transparency">Transp.</option>
@@ -137,7 +137,7 @@
             </div>
 
             <!-- Advanced toggles -->
-            <div class="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+            <div class="pt-3 border-t border-zinc-200/80 dark:border-zinc-800 space-y-2.5">
               <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
                 <input type="checkbox" id="opt-merge-pdf" class="rounded text-indigo-600 focus:ring-indigo-500 border-zinc-300 bg-white dark:bg-zinc-900 dark:border-zinc-700">
                 Fusionner en un seul PDF
@@ -149,22 +149,22 @@
             </div>
 
             <!-- PDF Options -->
-            <div class="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
-              <h4 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Options PDF</h4>
+            <div class="pt-3 border-t border-zinc-200/80 dark:border-zinc-800 space-y-2.5">
+              <h4 class="section-label mb-1">Options PDF</h4>
               <div class="space-y-2">
-                <input type="text" id="opt-page-range" placeholder="Pages (Ex: 1-5,7)" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm focus-ring placeholder-zinc-400 dark:placeholder-zinc-600">
-                <select id="opt-page-filter" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm focus-ring">
+                <input type="text" id="opt-page-range" placeholder="Pages (Ex: 1-5,7)" class="input-field placeholder-zinc-400 dark:placeholder-zinc-600">
+                <select id="opt-page-filter" class="input-field">
                   <option value="all">Toutes les pages</option>
                   <option value="even">Paires uniquement</option>
                   <option value="odd">Impaires uniquement</option>
                 </select>
                 <div class="grid grid-cols-2 gap-2">
-                  <select id="opt-scale" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-sm focus-ring">
+                  <select id="opt-scale" class="input-field">
                     <option value="fit">Ajuster</option>
                     <option value="shrink">Réduire</option>
                     <option value="noscale">Taille réelle</option>
                   </select>
-                  <select id="opt-retry" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-sm focus-ring">
+                  <select id="opt-retry" class="input-field">
                     <option value="0">0 retry</option>
                     <option value="1">1 retry</option>
                     <option value="2" selected>2 retrys</option>
@@ -175,9 +175,9 @@
             </div>
             
             <!-- Schedule -->
-            <div class="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-              <label class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Planifier (Heure)</label>
-              <input type="time" id="opt-schedule" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm focus-ring">
+            <div class="pt-3 border-t border-zinc-200/80 dark:border-zinc-800 space-y-1.5">
+              <label class="section-label">Planifier (Heure)</label>
+              <input type="time" id="opt-schedule" class="input-field">
             </div>
 
           </div>
@@ -188,86 +188,86 @@
       <section class="flex-1 flex flex-col min-w-0 bg-white dark:bg-zinc-950">
         
         <!-- Toolbar -->
-        <div class="h-16 px-6 border-b border-zinc-100 dark:border-white/5 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+        <div class="h-12 px-5 border-b border-zinc-100 dark:border-white/[0.04] flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <h2 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
               Fichiers
-              <span id="file-count" class="px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 text-xs font-bold">0</span>
+              <span id="file-count" class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300 text-[11px] font-bold tabular-nums">0</span>
             </h2>
-            <div class="h-4 w-px bg-zinc-300 dark:bg-zinc-700 mx-1"></div>
-            <button id="filter-pdf-btn" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors focus-ring">📄 Seulement PDF</button>
-            <button id="filter-img-btn" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors focus-ring">❌ Sans Images</button>
+            <div class="h-4 w-px bg-zinc-200 dark:bg-zinc-800"></div>
+            <button id="filter-pdf-btn" class="btn-ghost focus-ring">📄 PDF seul</button>
+            <button id="filter-img-btn" class="btn-ghost focus-ring">🚫 Sans images</button>
           </div>
-          <div class="flex items-center gap-2">
-            <button id="sort-btn" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors focus-ring flex items-center gap-1">
+          <div class="flex items-center gap-1.5">
+            <button id="sort-btn" class="btn-ghost-border focus-ring flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" /></svg>
               Trier A-Z
             </button>
-            <button id="clear-all-btn" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 transition-colors focus-ring">
+            <button id="clear-all-btn" class="btn-danger-soft focus-ring">
               Tout vider
             </button>
           </div>
         </div>
 
         <!-- Hot Folder Banner -->
-        <div class="mx-6 mt-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700/30 flex items-center justify-between shadow-sm">
-          <div class="flex items-center gap-3 overflow-hidden">
-            <div class="p-2 bg-amber-100 dark:bg-amber-800/40 rounded-lg text-amber-600 dark:text-amber-400">📂</div>
+        <div class="mx-5 mt-3 p-2.5 rounded-xl card-surface flex items-center justify-between">
+          <div class="flex items-center gap-2.5 overflow-hidden">
+            <div class="p-1.5 bg-indigo-100 dark:bg-indigo-500/15 rounded-lg text-indigo-600 dark:text-indigo-400 text-sm">📂</div>
             <div class="min-w-0">
-              <h4 class="text-sm font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+              <h4 class="text-xs font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
                 Hot Folder
-                <span id="hot-folder-status" class="hidden w-2 h-2 rounded-full bg-green-500 status-pulse"></span>
+                <span id="hot-folder-status" class="hidden w-1.5 h-1.5 rounded-full bg-emerald-500 status-pulse"></span>
               </h4>
-              <p id="hot-folder-path" class="text-xs text-amber-700 dark:text-amber-400/80 truncate">Aucun dossier surveillé</p>
+              <p id="hot-folder-path" class="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">Aucun dossier surveillé</p>
             </div>
           </div>
-          <div class="flex gap-2 shrink-0">
-            <button id="hot-folder-select-btn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors focus-ring shadow-sm">Choisir</button>
-            <button id="hot-folder-stop-btn" class="hidden text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors focus-ring shadow-sm">Arrêter</button>
+          <div class="flex gap-1.5 shrink-0">
+            <button id="hot-folder-select-btn" class="btn-accent-soft px-2.5 py-1 text-[11px] font-semibold focus-ring">Choisir</button>
+            <button id="hot-folder-stop-btn" class="hidden text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors focus-ring">Arrêter</button>
           </div>
         </div>
 
         <!-- Dropzone & List -->
-        <div class="flex-1 p-6 flex flex-col gap-4 min-h-0">
-          <div id="drop-zone" class="flex-none h-32 border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl flex flex-col items-center justify-center bg-zinc-50/50 dark:bg-zinc-900/20 text-zinc-500 transition-all hover:bg-indigo-50 dark:hover:bg-indigo-500/5 hover:border-indigo-400 cursor-pointer group">
-            <div class="p-3 bg-white dark:bg-zinc-800 rounded-xl shadow-sm mb-2 group-hover:scale-105 transition-transform text-indigo-500">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+        <div class="flex-1 p-5 flex flex-col gap-3 min-h-0">
+          <div id="drop-zone" class="flex-none h-28 border-2 border-dashed border-zinc-300/80 dark:border-zinc-700/60 rounded-xl flex flex-col items-center justify-center bg-zinc-50/50 dark:bg-zinc-900/20 text-zinc-400 transition-all hover:bg-indigo-50/50 dark:hover:bg-indigo-500/[0.04] hover:border-indigo-400/60 dark:hover:border-indigo-500/40 cursor-pointer group">
+            <div class="p-2.5 bg-white dark:bg-zinc-800 rounded-lg shadow-sm mb-1.5 group-hover:scale-105 group-hover:shadow-md transition-all text-indigo-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
             </div>
-            <p class="font-medium text-sm">Glissez vos fichiers ou dossiers ici</p>
+            <p class="font-medium text-xs">Glissez vos fichiers ou dossiers ici</p>
           </div>
 
-          <ul id="file-list" class="flex-1 overflow-y-auto space-y-2 pb-2 pr-1">
+          <ul id="file-list" class="flex-1 overflow-y-auto space-y-1.5 pb-2 pr-1">
             <!-- Files injected here -->
           </ul>
         </div>
 
         <!-- Progress Area -->
-        <div id="progress-section" class="hidden px-6 py-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-200 dark:border-zinc-800">
+        <div id="progress-section" class="hidden px-5 py-3 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-200 dark:border-zinc-800">
           <div class="flex justify-between items-center mb-2">
             <span id="progress-label" class="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Impression...</span>
-            <div class="flex items-center gap-3">
-              <button id="pause-queue-btn" class="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded-md shadow-sm transition-colors focus-ring">Pause</button>
-              <button id="resume-queue-btn" class="hidden text-xs font-bold bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded-md shadow-sm transition-colors focus-ring">Reprendre</button>
-              <span id="progress-counter" class="text-sm font-bold text-indigo-600 dark:text-indigo-400">0 / 0</span>
+            <div class="flex items-center gap-2">
+              <button id="pause-queue-btn" class="text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded-md transition-colors focus-ring">Pause</button>
+              <button id="resume-queue-btn" class="hidden text-[11px] font-bold bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded-md transition-colors focus-ring">Reprendre</button>
+              <span id="progress-counter" class="text-sm font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">0 / 0</span>
             </div>
           </div>
-          <div class="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
-            <div id="progress-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+          <div class="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+            <div id="progress-bar" class="bg-indigo-500 h-1.5 rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
           </div>
         </div>
 
         <!-- Action Bar -->
-        <div class="glass-panel p-4 border-t border-zinc-200 dark:border-white/10 flex justify-between items-center z-10">
-          <div class="flex items-center gap-3 px-2">
-            <div class="w-2.5 h-2.5 bg-green-500 rounded-full status-pulse"></div>
-            <p id="status-message" class="text-sm font-medium text-zinc-600 dark:text-zinc-400">Prêt à imprimer.</p>
+        <div class="glass-panel p-3 border-t border-zinc-200 dark:border-white/[0.06] flex justify-between items-center z-10">
+          <div class="flex items-center gap-2.5 px-1">
+            <div class="w-2 h-2 bg-emerald-500 rounded-full status-pulse"></div>
+            <p id="status-message" class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Prêt à imprimer.</p>
             <button id="export-logs-btn" class="hidden text-xs font-semibold text-indigo-600 hover:underline">Exporter le rapport</button>
           </div>
-          <div class="flex gap-3">
-            <button id="cancel-btn" class="hidden bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 px-6 rounded-xl shadow-sm transition-transform active:scale-95 focus-ring">
+          <div class="flex gap-2.5">
+            <button id="cancel-btn" class="hidden bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-5 rounded-xl shadow-sm transition-all active:scale-[0.97] focus-ring">
               Annuler
             </button>
-            <button id="print-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-xl shadow-md shadow-indigo-500/20 transition-all active:scale-95 focus-ring disabled:opacity-50 disabled:cursor-not-allowed">
+            <button id="print-btn" class="btn-primary py-2.5 px-8 text-sm">
               Lancer l'impression
             </button>
           </div>
@@ -276,24 +276,24 @@
       </section>
     </main>
 
-    <!-- MODALS (Hidden by default, structured minimally for space) -->
+    <!-- MODALS -->
     
     <!-- Print Modal -->
     <div id="print-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-zinc-900/60 backdrop-blur-sm opacity-0 transition-opacity">
       <div id="print-modal-content" class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-zinc-200 dark:border-zinc-800 transform scale-95 transition-transform">
-        <h2 class="text-xl font-bold text-zinc-900 dark:text-white mb-4">Impression terminée</h2>
-        <div class="flex gap-4 mb-6">
-          <div class="flex-1 bg-green-50 dark:bg-green-500/10 p-3 rounded-xl border border-green-200 dark:border-green-500/20 text-center">
-            <div class="text-sm text-green-700 dark:text-green-400 font-semibold mb-1">Succès</div>
-            <div id="modal-success-count" class="text-2xl font-bold text-green-800 dark:text-green-300">0</div>
+        <h2 class="text-lg font-bold text-zinc-900 dark:text-white mb-4">Impression terminée</h2>
+        <div class="flex gap-3 mb-5">
+          <div class="flex-1 bg-emerald-50 dark:bg-emerald-500/10 p-3 rounded-xl border border-emerald-200 dark:border-emerald-500/20 text-center">
+            <div class="text-xs text-emerald-700 dark:text-emerald-400 font-semibold mb-1">Succès</div>
+            <div id="modal-success-count" class="text-2xl font-bold text-emerald-800 dark:text-emerald-300">0</div>
           </div>
           <div class="flex-1 bg-red-50 dark:bg-red-500/10 p-3 rounded-xl border border-red-200 dark:border-red-500/20 text-center">
-            <div class="text-sm text-red-700 dark:text-red-400 font-semibold mb-1">Échecs</div>
+            <div class="text-xs text-red-700 dark:text-red-400 font-semibold mb-1">Échecs</div>
             <div id="modal-error-count" class="text-2xl font-bold text-red-800 dark:text-red-300">0</div>
           </div>
         </div>
         <div class="space-y-2">
-          <button id="modal-clean-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition-colors">Nettoyer & Fermer</button>
+          <button id="modal-clean-btn" class="w-full btn-primary py-2.5">Nettoyer & Fermer</button>
           <button id="modal-close-btn" class="w-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white font-semibold py-2.5 rounded-xl transition-colors">Fermer</button>
         </div>
       </div>
@@ -303,18 +303,18 @@
     <div id="dashboard-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-zinc-900/60 backdrop-blur-sm opacity-0 transition-opacity">
       <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[90vh]">
         <div class="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
-          <h2 class="text-lg font-bold">Analytics</h2>
-          <button id="dashboard-close-btn" class="text-zinc-500 hover:text-zinc-900 dark:hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+          <h2 class="text-base font-bold">Analytics</h2>
+          <button id="dashboard-close-btn" class="btn-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
-        <div class="p-6 overflow-y-auto">
-          <div class="grid grid-cols-2 gap-4 mb-6">
-            <div class="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700">
-              <div class="text-sm text-zinc-500 mb-1">Total Pages</div>
-              <div id="stat-total-pages" class="text-2xl font-bold text-indigo-600">0</div>
+        <div class="p-5 overflow-y-auto">
+          <div class="grid grid-cols-2 gap-3 mb-5">
+            <div class="card-surface p-4">
+              <div class="section-label mb-1">Total Pages</div>
+              <div id="stat-total-pages" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0</div>
             </div>
-            <div class="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700">
-              <div class="text-sm text-zinc-500 mb-1">Succès / Erreurs</div>
-              <div class="text-xl font-bold"><span id="stat-success" class="text-green-500">0</span> / <span id="stat-errors" class="text-red-500">0</span></div>
+            <div class="card-surface p-4">
+              <div class="section-label mb-1">Succès / Erreurs</div>
+              <div class="text-xl font-bold"><span id="stat-success" class="text-emerald-500">0</span> / <span id="stat-errors" class="text-red-500">0</span></div>
             </div>
           </div>
           <div class="h-64"><canvas id="analyticsChart"></canvas></div>
@@ -325,83 +325,339 @@
     <!-- Settings Modal -->
     <div id="settings-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-zinc-900/60 backdrop-blur-sm opacity-0 transition-opacity">
       <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-zinc-200 dark:border-zinc-800 flex flex-col h-[85vh]">
-        <div class="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50 rounded-t-2xl">
-          <h2 class="text-lg font-bold">Paramètres</h2>
-          <button id="settings-close-btn" class="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        <div class="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
+          <h2 class="text-base font-bold">Paramètres</h2>
+          <button id="settings-close-btn" class="btn-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
         <div class="flex flex-1 overflow-hidden">
-          <div class="w-64 bg-zinc-50/50 dark:bg-zinc-900/30 border-r border-zinc-200 dark:border-zinc-800 p-4 space-y-1 overflow-y-auto">
-            <button class="settings-tab-btn active w-full text-left px-3 py-2 rounded-lg text-sm font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300" data-target="tab-general">Général</button>
-            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" data-target="tab-advanced">Avancé</button>
-            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" data-target="tab-engine">Moteur</button>
-            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" data-target="tab-alias">Alias</button>
-            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" data-target="tab-watermark">Filigrane</button>
-            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" data-target="tab-preop">Pré-opérations</button>
+          <div class="w-56 bg-zinc-50/50 dark:bg-zinc-900/30 border-r border-zinc-200 dark:border-zinc-800 p-3 space-y-0.5 overflow-y-auto">
+            <button class="settings-tab-btn active w-full text-left px-3 py-2 rounded-lg text-sm font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300" data-target="tab-general">Général</button>
+            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors" data-target="tab-advanced">Avancé</button>
+            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors" data-target="tab-engine">Moteur</button>
+            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors" data-target="tab-alias">Alias</button>
+            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors" data-target="tab-watermark">Filigrane</button>
+            <button class="settings-tab-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors" data-target="tab-preop">Pré-opérations</button>
           </div>
-          <div class="flex-1 p-6 overflow-y-auto">
+          <div class="flex-1 p-5 overflow-y-auto">
             
-            <div id="tab-general" class="settings-tab block space-y-6">
-              <h3 class="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Général</h3>
-              <label class="flex items-center gap-3"><input type="checkbox" id="setting-log-mode" class="rounded"> <span class="text-sm font-medium">Mode Log</span></label>
-              <div class="p-4 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
-                <label class="flex items-center gap-3"><input type="checkbox" id="setting-auto-archive" class="rounded"> <span class="text-sm font-medium">Archivage Auto</span></label>
-                <input type="text" id="setting-archive-success" placeholder="Dossier succès" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm">
-                <input type="text" id="setting-archive-error" placeholder="Dossier erreur" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm">
+            <div id="tab-general" class="settings-tab block space-y-5">
+              <h3 class="text-base font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Général</h3>
+              
+              <!-- Log mode -->
+              <div class="card-surface p-4 space-y-1">
+                <label class="flex items-center gap-3">
+                  <input type="checkbox" id="setting-log-mode" class="rounded">
+                  <span class="text-sm font-medium">Mode Log</span>
+                </label>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 ml-6">Enregistre un journal détaillé de chaque opération d'impression dans un fichier local.</p>
               </div>
-              <div>
-                <h4 class="text-sm font-bold mb-3">Proxy</h4>
-                <div class="grid grid-cols-2 gap-2 mb-3">
-                  <label class="p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center gap-2 cursor-pointer"><input type="radio" name="proxy_mode" value="system" checked> Système</label>
-                  <label class="p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center gap-2 cursor-pointer"><input type="radio" name="proxy_mode" value="network"> Réseau (Auto)</label>
-                  <label class="p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center gap-2 cursor-pointer"><input type="radio" name="proxy_mode" value="none"> Direct</label>
-                  <label class="p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center gap-2 cursor-pointer"><input type="radio" name="proxy_mode" value="manual"> Manuel</label>
-                </div>
-                <div id="proxy-manual-config" class="hidden"><input type="text" id="setting-proxy-url" placeholder="URL Proxy" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm"></div>
-              </div>
-            </div>
 
-            <div id="tab-engine" class="settings-tab hidden space-y-4">
-              <h3 class="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Moteur</h3>
-              <label class="flex items-center gap-3"><input type="checkbox" id="setting-compat-mode" class="rounded"> <span class="text-sm font-medium">Mode Compatibilité</span></label>
-              <label class="flex items-center gap-3"><input type="checkbox" id="setting-print-as-image" class="rounded"> <span class="text-sm font-medium">Imprimer comme image</span></label>
-            </div>
-
-            <div id="tab-advanced" class="settings-tab hidden space-y-4">
-              <h3 class="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Avancé</h3>
-              <label class="flex items-center gap-3"><input type="checkbox" id="setting-auto-rotate" checked class="rounded"> <span class="text-sm font-medium">Auto-rotation</span></label>
-              <label class="flex items-center gap-3"><input type="checkbox" id="opt-exclude-blank-pages" class="rounded"> <span class="text-sm font-medium">Supprimer pages blanches</span></label>
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-xs font-semibold mb-1">Agrafage</label>
-                  <select id="setting-stapling" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm"><option value="none">Aucun</option><option value="top_left">Haut Gauche</option></select>
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold mb-1">Perforation</label>
-                  <select id="setting-punching" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm"><option value="none">Aucune</option><option value="two_holes">2 Trous</option></select>
+              <!-- Archivage -->
+              <div class="card-surface p-4 space-y-3">
+                <label class="flex items-center gap-3">
+                  <input type="checkbox" id="setting-auto-archive" class="rounded">
+                  <span class="text-sm font-medium">Archivage automatique</span>
+                </label>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 ml-6">Déplace automatiquement les fichiers traités dans des dossiers dédiés après impression.</p>
+                <div class="space-y-2 ml-6">
+                  <div class="space-y-1">
+                    <label class="section-label">Dossier des impressions réussies</label>
+                    <input type="text" id="setting-archive-success" placeholder="C:\Archives\Succès" class="input-field">
+                  </div>
+                  <div class="space-y-1">
+                    <label class="section-label">Dossier des impressions en erreur</label>
+                    <input type="text" id="setting-archive-error" placeholder="C:\Archives\Erreurs" class="input-field">
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div id="tab-alias" class="settings-tab hidden">
-              <h3 class="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4">Alias</h3>
-              <div class="text-sm text-zinc-500 text-center py-10 border border-zinc-200 dark:border-zinc-800 rounded-xl">Aucun alias configuré</div>
-            </div>
-
-            <div id="tab-watermark" class="settings-tab hidden space-y-4">
-              <h3 class="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Filigrane</h3>
-              <label class="flex items-center gap-3"><input type="checkbox" id="setting-enable-watermark" class="rounded"> <span class="text-sm font-medium">Activer</span></label>
-            </div>
-
-            <div id="tab-preop" class="settings-tab hidden flex-col h-full">
-              <h3 class="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4">Pré-opérations</h3>
-              <div class="flex gap-2 mb-4">
-                <select id="preop-type-select" class="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm"><option value="watermark">Filigrane</option><option value="merge">Fusion</option><option value="slip_sheet">Page de garde</option></select>
-                <button id="preop-add-btn" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">Ajouter</button>
-                <button id="preop-up-btn" class="bg-zinc-100 dark:bg-zinc-800 px-3 py-2 rounded-lg text-sm font-semibold">↑</button>
-                <button id="preop-down-btn" class="bg-zinc-100 dark:bg-zinc-800 px-3 py-2 rounded-lg text-sm font-semibold">↓</button>
-                <button id="preop-delete-btn" class="bg-red-50 text-red-600 dark:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-semibold">X</button>
+              <!-- Comportement -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Comportement</h4>
+                <label class="flex items-center gap-3">
+                  <input type="checkbox" id="setting-confirm-before-print" class="rounded">
+                  <span class="text-sm font-medium">Confirmer avant chaque impression</span>
+                </label>
+                <label class="flex items-center gap-3">
+                  <input type="checkbox" id="setting-clear-after-print" class="rounded" checked>
+                  <span class="text-sm font-medium">Vider la liste après impression</span>
+                </label>
+                <label class="flex items-center gap-3">
+                  <input type="checkbox" id="setting-notify-on-complete" class="rounded" checked>
+                  <span class="text-sm font-medium">Notification à la fin de l'impression</span>
+                </label>
               </div>
-              <ul id="preop-list" class="flex-1 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2"><div id="preop-empty-msg" class="text-center text-zinc-500 mt-10 text-sm">Vide</div></ul>
+
+              <!-- Proxy -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Proxy réseau</h4>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400">Configuration du proxy pour les vérifications de mise à jour et les connexions réseau.</p>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="p-2.5 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center gap-2 cursor-pointer text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"><input type="radio" name="proxy_mode" value="system" checked> Système</label>
+                  <label class="p-2.5 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center gap-2 cursor-pointer text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"><input type="radio" name="proxy_mode" value="network"> Réseau (Auto)</label>
+                  <label class="p-2.5 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center gap-2 cursor-pointer text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"><input type="radio" name="proxy_mode" value="none"> Direct</label>
+                  <label class="p-2.5 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center gap-2 cursor-pointer text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"><input type="radio" name="proxy_mode" value="manual"> Manuel</label>
+                </div>
+                <div id="proxy-manual-config" class="hidden space-y-1">
+                  <label class="section-label">Adresse du proxy</label>
+                  <input type="text" id="setting-proxy-url" placeholder="http://proxy.exemple.com:8080" class="input-field">
+                </div>
+              </div>
+            </div>
+
+            <div id="tab-engine" class="settings-tab hidden space-y-5">
+              <h3 class="text-base font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Moteur d'impression</h3>
+
+              <!-- Rendering mode -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Rendu</h4>
+                <div class="space-y-1">
+                  <label class="flex items-center gap-3">
+                    <input type="checkbox" id="setting-compat-mode" class="rounded">
+                    <span class="text-sm font-medium">Mode compatibilité</span>
+                  </label>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 ml-6">Active un pipeline d'impression simplifié pour les imprimantes anciennes ou problématiques.</p>
+                </div>
+                <div class="space-y-1">
+                  <label class="flex items-center gap-3">
+                    <input type="checkbox" id="setting-print-as-image" class="rounded">
+                    <span class="text-sm font-medium">Imprimer comme image</span>
+                  </label>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 ml-6">Rastérise le PDF avant envoi. Résout les problèmes de polices manquantes ou de transparences complexes.</p>
+                </div>
+              </div>
+
+              <!-- Performance -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Performance</h4>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="section-label">Timeout par fichier (s)</label>
+                    <input type="number" id="setting-timeout" min="10" max="600" value="120" class="input-field text-center">
+                  </div>
+                  <div class="space-y-1">
+                    <label class="section-label">Impressions simultanées</label>
+                    <select id="setting-concurrency" class="input-field">
+                      <option value="1" selected>1 (séquentiel)</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400">Un timeout trop court peut annuler les gros fichiers. Les impressions simultanées accélèrent le traitement mais peuvent surcharger l'imprimante.</p>
+              </div>
+
+              <!-- Resolution -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Résolution</h4>
+                <div class="space-y-1">
+                  <label class="section-label">DPI de rastérisation</label>
+                  <select id="setting-render-dpi" class="input-field">
+                    <option value="150">150 DPI (rapide)</option>
+                    <option value="300" selected>300 DPI (standard)</option>
+                    <option value="600">600 DPI (haute qualité)</option>
+                  </select>
+                </div>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400">Utilisé uniquement lorsque « Imprimer comme image » est activé. Un DPI élevé augmente la taille du spool et le temps de traitement.</p>
+              </div>
+            </div>
+
+            <div id="tab-advanced" class="settings-tab hidden space-y-5">
+              <h3 class="text-base font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Avancé</h3>
+
+              <!-- Page handling -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Gestion des pages</h4>
+                <div class="space-y-1">
+                  <label class="flex items-center gap-3">
+                    <input type="checkbox" id="setting-auto-rotate" checked class="rounded">
+                    <span class="text-sm font-medium">Auto-rotation</span>
+                  </label>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 ml-6">Pivote automatiquement les pages pour correspondre à l'orientation du papier sélectionné.</p>
+                </div>
+                <div class="space-y-1">
+                  <label class="flex items-center gap-3">
+                    <input type="checkbox" id="opt-exclude-blank-pages" class="rounded">
+                    <span class="text-sm font-medium">Supprimer les pages blanches</span>
+                  </label>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 ml-6">Détecte et ignore les pages entièrement vides pour économiser du papier.</p>
+                </div>
+              </div>
+
+              <!-- N-up / Multi-pages -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Mise en page</h4>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="section-label">Pages par feuille</label>
+                    <select id="setting-nup" class="input-field">
+                      <option value="1" selected>1 (normal)</option>
+                      <option value="2">2 pages</option>
+                      <option value="4">4 pages</option>
+                      <option value="6">6 pages</option>
+                      <option value="9">9 pages</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="section-label">Ordre N-up</label>
+                    <select id="setting-nup-order" class="input-field">
+                      <option value="lrtb" selected>Gauche→Droite ↓</option>
+                      <option value="rltb">Droite→Gauche ↓</option>
+                      <option value="tblr">Haut→Bas →</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Finishing -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Finition</h4>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="section-label">Agrafage</label>
+                    <select id="setting-stapling" class="input-field">
+                      <option value="none">Aucun</option>
+                      <option value="top_left">Haut gauche</option>
+                      <option value="top_right">Haut droit</option>
+                      <option value="dual_left">Double gauche</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="section-label">Perforation</label>
+                    <select id="setting-punching" class="input-field">
+                      <option value="none">Aucune</option>
+                      <option value="two_holes">2 trous</option>
+                      <option value="four_holes">4 trous</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="space-y-1">
+                  <label class="flex items-center gap-3">
+                    <input type="checkbox" id="setting-collate" class="rounded" checked>
+                    <span class="text-sm font-medium">Assembler (interclasser)</span>
+                  </label>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 ml-6">Imprime les jeux de copies complets dans l'ordre (1-2-3, 1-2-3) au lieu de grouper par page (1-1, 2-2, 3-3).</p>
+                </div>
+              </div>
+            </div>
+
+            <div id="tab-alias" class="settings-tab hidden space-y-5">
+              <h3 class="text-base font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Alias d'imprimante</h3>
+              <p class="text-sm text-zinc-500 dark:text-zinc-400">Créez des noms courts pour vos imprimantes. Les alias peuvent être utilisés dans les profils et les scripts d'automatisation.</p>
+
+              <!-- Add alias form -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Ajouter un alias</h4>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="space-y-1">
+                    <label class="section-label">Nom de l'alias</label>
+                    <input type="text" id="alias-name" placeholder="ex: couleur-rdc" class="input-field">
+                  </div>
+                  <div class="space-y-1">
+                    <label class="section-label">Imprimante cible</label>
+                    <select id="alias-printer" class="input-field">
+                      <option value="">Sélectionner...</option>
+                    </select>
+                  </div>
+                </div>
+                <button id="alias-add-btn" class="btn-accent-soft px-3 py-1.5 focus-ring">Ajouter l'alias</button>
+              </div>
+
+              <!-- Alias list -->
+              <div class="card-surface p-3">
+                <ul id="alias-list" class="space-y-1">
+                  <li class="text-sm text-zinc-500 text-center py-8">Aucun alias configuré</li>
+                </ul>
+              </div>
+            </div>
+
+            <div id="tab-watermark" class="settings-tab hidden space-y-5">
+              <h3 class="text-base font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Filigrane</h3>
+
+              <!-- Enable -->
+              <div class="card-surface p-4 space-y-1">
+                <label class="flex items-center gap-3">
+                  <input type="checkbox" id="setting-enable-watermark" class="rounded">
+                  <span class="text-sm font-medium">Activer le filigrane</span>
+                </label>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 ml-6">Ajoute un texte en surimpression sur chaque page avant l'impression.</p>
+              </div>
+
+              <!-- Watermark settings -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Contenu</h4>
+                <div class="space-y-1">
+                  <label class="section-label">Texte du filigrane</label>
+                  <input type="text" id="setting-watermark-text" placeholder="CONFIDENTIEL" class="input-field" maxlength="50">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="section-label">Taille de police</label>
+                    <select id="setting-watermark-size" class="input-field">
+                      <option value="24">Petit (24pt)</option>
+                      <option value="48" selected>Moyen (48pt)</option>
+                      <option value="72">Grand (72pt)</option>
+                      <option value="96">Très grand (96pt)</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="section-label">Couleur</label>
+                    <select id="setting-watermark-color" class="input-field">
+                      <option value="gray" selected>Gris</option>
+                      <option value="red">Rouge</option>
+                      <option value="blue">Bleu</option>
+                      <option value="black">Noir</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Position & style -->
+              <div class="card-surface p-4 space-y-3">
+                <h4 class="text-sm font-bold">Position et style</h4>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="section-label">Position</label>
+                    <select id="setting-watermark-position" class="input-field">
+                      <option value="center" selected>Centre</option>
+                      <option value="top">Haut</option>
+                      <option value="bottom">Bas</option>
+                      <option value="diagonal">Diagonale</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="section-label">Opacité</label>
+                    <select id="setting-watermark-opacity" class="input-field">
+                      <option value="10">10%</option>
+                      <option value="20" selected>20%</option>
+                      <option value="30">30%</option>
+                      <option value="50">50%</option>
+                      <option value="75">75%</option>
+                    </select>
+                  </div>
+                </div>
+                <label class="flex items-center gap-3">
+                  <input type="checkbox" id="setting-watermark-first-only" class="rounded">
+                  <span class="text-sm font-medium">Première page uniquement</span>
+                </label>
+              </div>
+            </div>
+
+            <div id="tab-preop" class="settings-tab hidden flex-col h-full space-y-4">
+              <h3 class="text-base font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2">Pré-opérations</h3>
+              <p class="text-sm text-zinc-500 dark:text-zinc-400">Les pré-opérations s'exécutent dans l'ordre avant l'envoi à l'imprimante. Ajoutez des étapes pour transformer vos documents automatiquement.</p>
+              <div class="flex gap-1.5">
+                <select id="preop-type-select" class="input-field flex-1">
+                  <option value="watermark">Filigrane</option>
+                  <option value="merge">Fusion</option>
+                  <option value="slip_sheet">Page de garde</option>
+                </select>
+                <button id="preop-add-btn" class="btn-primary px-3 py-2 text-xs">Ajouter</button>
+                <button id="preop-up-btn" class="btn-ghost px-2.5 py-2" title="Monter">↑</button>
+                <button id="preop-down-btn" class="btn-ghost px-2.5 py-2" title="Descendre">↓</button>
+                <button id="preop-delete-btn" class="btn-danger-soft px-2.5 py-2" title="Supprimer">✕</button>
+              </div>
+              <ul id="preop-list" class="flex-1 card-surface p-2 min-h-[120px]"><div id="preop-empty-msg" class="text-center text-zinc-500 mt-8 text-sm">Aucune pré-opération configurée</div></ul>
             </div>
 
           </div>
@@ -411,21 +667,21 @@
 
     <!-- File Settings Modal -->
     <div id="file-settings-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-zinc-900/60 backdrop-blur-sm opacity-0 transition-opacity">
-      <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-zinc-200 dark:border-zinc-800 transform scale-95 transition-transform">
+      <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-5 w-full max-w-lg border border-zinc-200 dark:border-zinc-800 transform scale-95 transition-transform">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-bold" id="fs-modal-title">Fichier</h2>
-          <button id="fs-modal-close-btn" class="text-zinc-500 hover:text-zinc-900 dark:hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+          <h2 class="text-base font-bold" id="fs-modal-title">Fichier</h2>
+          <button id="fs-modal-close-btn" class="btn-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
-        <div class="space-y-3 mb-6">
-          <input type="number" id="fs-opt-copies" min="1" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm" placeholder="Copies">
-          <select id="fs-opt-color" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm"><option value="true">Couleur</option><option value="false">N&B</option></select>
-          <select id="fs-opt-duplex" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm"><option value="OneSided">Simple</option><option value="TwoSidedLongEdge">Bord long</option></select>
-          <input type="text" id="fs-opt-page-range" class="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm" placeholder="Plage (1-5)">
+        <div class="space-y-2.5 mb-5">
+          <input type="number" id="fs-opt-copies" min="1" class="input-field" placeholder="Copies">
+          <select id="fs-opt-color" class="input-field"><option value="true">Couleur</option><option value="false">N&B</option></select>
+          <select id="fs-opt-duplex" class="input-field"><option value="OneSided">Simple</option><option value="TwoSidedLongEdge">Bord long</option></select>
+          <input type="text" id="fs-opt-page-range" class="input-field" placeholder="Plage (1-5)">
           <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="fs-opt-exclude-blank-pages" class="rounded"> Supprimer pages blanches</label>
         </div>
         <div class="flex justify-between">
-          <button id="fs-modal-reset-btn" class="text-red-500 font-semibold text-sm hover:bg-red-50 dark:hover:bg-red-500/10 px-4 py-2 rounded-lg transition-colors">Réinitialiser</button>
-          <button id="fs-modal-save-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2 rounded-lg transition-colors shadow-sm">Enregistrer</button>
+          <button id="fs-modal-reset-btn" class="btn-danger-soft px-3 py-2 font-semibold">Réinitialiser</button>
+          <button id="fs-modal-save-btn" class="btn-primary px-5 py-2 text-sm">Enregistrer</button>
         </div>
       </div>
     </div>

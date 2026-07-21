@@ -384,13 +384,13 @@ async function renderFileList() {
     const isImg = filePath.match(/\.(jpg|jpeg|png|gif|webp)$/i);
     
     const li = document.createElement("li");
-    li.className = "flex items-center bg-slate-100 dark:bg-slate-700/80 p-2 rounded text-sm text-slate-700 dark:text-slate-200 cursor-grab active:cursor-grabbing border border-transparent dark:border-slate-600 transition-colors gap-3";
+    li.className = "file-item";
     li.draggable = true;
     li.dataset.index = index.toString();
 
     // Conteneur miniature
     const thumbContainer = document.createElement("div");
-    thumbContainer.className = "w-10 h-10 shrink-0 bg-slate-200 dark:bg-slate-800 rounded overflow-hidden flex items-center justify-center";
+    thumbContainer.className = "file-item-thumb";
     
     if (isImg) {
       const img = document.createElement("img");
@@ -402,38 +402,38 @@ async function renderFileList() {
     }
 
     const titleContainer = document.createElement("div");
-    titleContainer.className = "flex-1 min-w-0 pointer-events-none";
+    titleContainer.className = "file-item-title";
     
     const titleSpan = document.createElement("div");
-    titleSpan.className = "truncate font-medium flex-1";
+    titleSpan.className = "file-item-name";
     titleSpan.title = filePath;
     titleSpan.textContent = fileName;
     titleContainer.appendChild(titleSpan);
 
     if (isPdf) {
       const pageSpan = document.createElement("div");
-      pageSpan.className = "text-[10px] text-slate-400 font-mono";
+      pageSpan.className = "file-item-meta";
       const pageCount = pdfPageCounts[filePath];
       pageSpan.textContent = pageCount !== undefined ? `${pageCount} pages` : `? pages`;
       titleContainer.appendChild(pageSpan);
     }
 
     const settingsBtn = document.createElement("button");
-    settingsBtn.className = "text-slate-400 hover:text-blue-500 font-bold px-2";
+    settingsBtn.className = "file-item-btn";
     settingsBtn.innerHTML = "⚙️";
     settingsBtn.title = "Paramètres de ce fichier";
     settingsBtn.onclick = () => openFileSettings(index);
     if (fileItem.options !== null) {
-      settingsBtn.classList.add("text-blue-500");
+      settingsBtn.classList.add("!text-indigo-500");
     }
 
     const deleteBtn = document.createElement("button");
-    deleteBtn.className = "text-red-500 hover:text-red-700 font-bold px-2";
+    deleteBtn.className = "file-item-btn-delete";
     deleteBtn.textContent = "✕";
     deleteBtn.onclick = () => removeFile(index);
 
     const statusBadge = document.createElement("span");
-    statusBadge.className = "text-xs font-semibold text-slate-400 status-badge pointer-events-none shrink-0 w-20 text-right";
+    statusBadge.className = "file-item-status";
     statusBadge.textContent = "En attente";
     statusBadge.id = `status-${index}`;
 
@@ -460,12 +460,12 @@ function removeFile(index) {
 let draggedItemIndex: number | null = null;
 function handleDragStart(e: DragEvent) { draggedItemIndex = parseInt((e.target as HTMLElement).dataset.index || "0"); if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; } }
 function handleDragOver(e: DragEvent) { e.preventDefault(); if (e.dataTransfer) { e.dataTransfer.dropEffect = "move"; } }
-function handleDragEnter(e: DragEvent) { e.preventDefault(); (e.currentTarget as HTMLElement).classList.add("border-blue-400"); }
-function handleDragLeave(e: DragEvent) { (e.currentTarget as HTMLElement).classList.remove("border-blue-400"); }
+function handleDragEnter(e: DragEvent) { e.preventDefault(); (e.currentTarget as HTMLElement).classList.add("border-indigo-400"); }
+function handleDragLeave(e: DragEvent) { (e.currentTarget as HTMLElement).classList.remove("border-indigo-400"); }
 function handleDrop(e: DragEvent) {
   e.preventDefault();
   const target = e.currentTarget as HTMLElement;
-  target.classList.remove("border-blue-400");
+  target.classList.remove("border-indigo-400");
   const targetIndex = parseInt(target.dataset.index || "0");
   if (draggedItemIndex !== null && draggedItemIndex !== targetIndex) {
     const item = filesToPrint.splice(draggedItemIndex, 1)[0];
@@ -551,7 +551,7 @@ function renderPreopList() {
     preopList.innerHTML = "";
     preopItems.forEach((op, idx) => {
       const li = document.createElement("li");
-      li.className = `p-2 rounded-lg cursor-pointer border ${selectedPreopIndex === idx ? 'bg-blue-100 border-blue-400 dark:bg-blue-900/40 dark:border-blue-500' : 'bg-white border-slate-200 dark:bg-slate-700 dark:border-slate-600'} text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors`;
+      li.className = `p-2 rounded-lg cursor-pointer border ${selectedPreopIndex === idx ? 'bg-indigo-50 border-indigo-400 dark:bg-indigo-500/15 dark:border-indigo-500' : 'bg-white border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'} text-sm font-medium text-zinc-700 dark:text-zinc-200 transition-colors`;
       let text = "";
       if (op === "watermark") text = "Ajouter un filigrane";
       if (op === "merge") text = "Fusionner les documents";
@@ -822,11 +822,11 @@ async function executePrintProcess() {
                   if (badge) {
                       if (q.status === "printing") {
                           badge.textContent = "Impression...";
-                          badge.className = "text-xs font-semibold text-blue-500 status-badge shrink-0 w-20 text-right";
+                          badge.className = "text-xs font-semibold text-indigo-500 dark:text-indigo-400 status-badge shrink-0 w-20 text-right";
                           statusMessage.textContent = `Impression de ${q.file_path.split(/[\\/]/).pop()}...`;
                       } else if (q.status === "completed") {
                           badge.textContent = "Terminé";
-                          badge.className = "text-xs font-semibold text-green-500 status-badge shrink-0 w-20 text-right";
+                          badge.className = "text-xs font-semibold text-emerald-500 status-badge shrink-0 w-20 text-right";
                           completed++;
                       } else if (q.status === "error") {
                           badge.textContent = "Erreur";
@@ -1107,8 +1107,8 @@ settingsTabBtns.forEach(btn => {
   btn.addEventListener("click", (e) => {
     // Reset tabs
     settingsTabBtns.forEach(b => {
-      b.classList.remove("active", "bg-blue-100", "text-blue-700", "dark:bg-indigo-900/40", "dark:text-indigo-300");
-      b.classList.add("text-slate-600", "dark:text-slate-300");
+      b.classList.remove("active", "bg-indigo-100", "text-indigo-700", "dark:bg-indigo-500/15", "dark:text-indigo-300", "font-semibold");
+      b.classList.add("text-zinc-600", "dark:text-zinc-400", "font-medium");
     });
     settingsTabs.forEach(tab => {
       tab.classList.remove("block");
@@ -1117,8 +1117,8 @@ settingsTabBtns.forEach(btn => {
     
     // Active clicked tab
     const targetBtn = e.currentTarget as HTMLButtonElement;
-    targetBtn.classList.remove("text-slate-600", "dark:text-slate-300");
-    targetBtn.classList.add("active", "bg-blue-100", "text-blue-700", "dark:bg-indigo-900/40", "dark:text-indigo-300");
+    targetBtn.classList.remove("text-zinc-600", "dark:text-zinc-400", "font-medium");
+    targetBtn.classList.add("active", "bg-indigo-100", "text-indigo-700", "dark:bg-indigo-500/15", "dark:text-indigo-300", "font-semibold");
     
     const targetId = targetBtn.getAttribute("data-target");
     if (targetId) {
@@ -1192,17 +1192,18 @@ window.addEventListener("DOMContentLoaded", () => {
   setupTauriDragDrop();
   setupHotFolderListener();
   loadAppVersion();
+  checkForUpdatesOnStartup();
   
   // NOUVEAU: Écouteur pour le statut de l'imprimante (Vérificateur Live)
   listen("printer-status-changed", (event: any) => {
     if (!printerStatusBadge) return;
     const { status, connected } = event.payload;
-    printerStatusBadge.classList.remove("hidden", "bg-green-100", "text-green-700", "border-green-200", "bg-red-100", "text-red-700", "border-red-200");
+    printerStatusBadge.classList.remove("hidden", "bg-emerald-100", "text-emerald-700", "border-emerald-200", "dark:bg-emerald-500/15", "dark:text-emerald-400", "dark:border-emerald-500/30", "bg-red-100", "text-red-700", "border-red-200", "dark:bg-red-500/15", "dark:text-red-400", "dark:border-red-500/30");
     if (connected) {
-      printerStatusBadge.classList.add("bg-green-100", "text-green-700", "border-green-200");
+      printerStatusBadge.classList.add("bg-emerald-100", "text-emerald-700", "border-emerald-200", "dark:bg-emerald-500/15", "dark:text-emerald-400", "dark:border-emerald-500/30");
       printerStatusBadge.innerHTML = `🟢 ${status}`;
     } else {
-      printerStatusBadge.classList.add("bg-red-100", "text-red-700", "border-red-200");
+      printerStatusBadge.classList.add("bg-red-100", "text-red-700", "border-red-200", "dark:bg-red-500/15", "dark:text-red-400", "dark:border-red-500/30");
       printerStatusBadge.innerHTML = `🔴 ${status}`;
     }
   });
@@ -1246,6 +1247,22 @@ dropZone.addEventListener("click", async () => {
     console.error(err);
   }
 });
+
+async function checkForUpdatesOnStartup() {
+  try {
+    const update = await check();
+    if (update) {
+      const wantsUpdate = confirm(`Une nouvelle version de TauriPrint (${update.version}) est disponible !\n\nNotes :\n${update.body || 'Améliorations diverses'}\n\nVoulez-vous la télécharger et l'installer maintenant ?`);
+      if (wantsUpdate) {
+        statusMessage.textContent = "Téléchargement de la mise à jour...";
+        await update.downloadAndInstall();
+        alert("Mise à jour installée avec succès. L'application va redémarrer.");
+      }
+    }
+  } catch (err) {
+    console.error("Erreur lors de la vérification automatique des mises à jour:", err);
+  }
+}
 
 const updateBtn = document.getElementById("update-btn") as HTMLButtonElement | null;
 if (updateBtn) {
