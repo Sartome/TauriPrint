@@ -1,13 +1,24 @@
-# Ruflo / Claude-Flow Runtime Data
-.claude-flow/
-code_map.md
-
-# Local MCP configuration (might contain secrets or local paths)
-.mcp.json
-
-# Ruflo generated rules, agents and skills
+# AI Assistants, Agents & Tools
+.agents/
 .claude/
+.claude-flow/
+.cline/
+.cursor/
+.cursorrules
+.gemini/
+.ruflo/
+.roo/
+.windsurf/
+.aider*
 CLAUDE.md
+AGENTS.md
+GEMINI.md
+code_map.md
+ruflo.config.json
+
+# MCP (Model Context Protocol)
+.mcp.json
+mcp.json
 
 # Graphify
 graphify-out/
