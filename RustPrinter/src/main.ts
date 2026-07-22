@@ -204,6 +204,20 @@ async function notify(title: string, body: string) {
 // FONCTIONS DE BASE
 // ============================================================
 
+function resolvePrinterAlias(printerName: string): string {
+  if (!printerName) return printerName;
+  const aliasesRaw = localStorage.getItem("tauriPrintAliases");
+  if (aliasesRaw) {
+    try {
+      const aliases: Record<string, string> = JSON.parse(aliasesRaw);
+      if (aliases[printerName]) {
+        return aliases[printerName];
+      }
+    } catch(e) {}
+  }
+  return printerName;
+}
+
 async function loadPrinters() {
   try {
     const printers: string[] = await invoke("get_printers");
@@ -254,7 +268,7 @@ async function loadPrinters() {
 printerSelect.addEventListener("change", updatePrinterCapabilities);
 
 async function updatePrinterCapabilities() {
-  const printer = printerSelect.value;
+  const printer = resolvePrinterAlias(printerSelect.value);
   if (!printer) return;
   try {
     const caps: any = await invoke("get_printer_capabilities", { printer });
@@ -826,15 +840,7 @@ async function executePrintProcess() {
   if (!selectedPrinter || filesToPrint.length === 0) return;
 
   // Résoudre l'alias si nécessaire
-  const aliasesRaw = localStorage.getItem("tauriPrintAliases");
-  if (aliasesRaw) {
-    try {
-      const aliases: Record<string, string> = JSON.parse(aliasesRaw);
-      if (aliases[selectedPrinter]) {
-        selectedPrinter = aliases[selectedPrinter];
-      }
-    } catch(e) {}
-  }
+  selectedPrinter = resolvePrinterAlias(selectedPrinter);
 
   let options;
   try {
@@ -1107,7 +1113,7 @@ async function setupHotFolderListener() {
     statusMessage.textContent = `Hot Folder: ${filePath.split(/[/\\]/).pop()} détecté.`;
     
     // Auto-impression si une imprimante est sélectionnée
-    const selectedPrinter = printerSelect.value;
+    const selectedPrinter = resolvePrinterAlias(printerSelect.value);
     if (selectedPrinter && hotFolderActive) {
       const options = getCurrentOptions();
       const maxRetries = parseInt(optRetry?.value || "0");
@@ -1219,7 +1225,7 @@ printerPropertiesBtn.addEventListener("click", async () => {
     return;
   }
   try {
-    await invoke("open_printer_properties", { printerName: printerSelect.value });
+    await invoke("open_printer_properties", { printerName: resolvePrinterAlias(printerSelect.value) });
   } catch(e) {
     alert("Erreur: " + e);
   }
@@ -1349,7 +1355,7 @@ printerSelect.addEventListener("change", async () => {
   if (printerStatusBadge) {
     printerStatusBadge.classList.add("hidden");
   }
-  const selected = printerSelect.value;
+  const selected = resolvePrinterAlias(printerSelect.value);
   if (selected) {
     try {
       await invoke("start_printer_monitor", { printer: selected });
