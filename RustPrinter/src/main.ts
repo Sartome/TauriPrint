@@ -125,6 +125,12 @@ let analyticsChartInstance: any = null;
 const pauseQueueBtn = document.getElementById("pause-queue-btn") as HTMLButtonElement;
 const resumeQueueBtn = document.getElementById("resume-queue-btn") as HTMLButtonElement;
 
+// Éléments d'alias
+const aliasNameInput = document.getElementById("alias-name") as HTMLInputElement;
+const aliasPrinterSelect = document.getElementById("alias-printer") as HTMLSelectElement;
+const aliasAddBtn = document.getElementById("alias-add-btn") as HTMLButtonElement;
+const aliasList = document.getElementById("alias-list") as HTMLUListElement;
+
 // État de l'application
 interface FileItem {
   path: string;
@@ -202,12 +208,37 @@ async function loadPrinters() {
   try {
     const printers: string[] = await invoke("get_printers");
     printerSelect.innerHTML = "";
+    if (aliasPrinterSelect) {
+      aliasPrinterSelect.innerHTML = "";
+    }
+    
     printers.forEach((printer) => {
       const option = document.createElement("option");
       option.value = printer;
       option.textContent = printer;
       printerSelect.appendChild(option);
+      
+      if (aliasPrinterSelect) {
+        const aliasOption = document.createElement("option");
+        aliasOption.value = printer;
+        aliasOption.textContent = printer;
+        aliasPrinterSelect.appendChild(aliasOption);
+      }
     });
+
+    // Charger les alias et les ajouter à la liste principale
+    const aliasesRaw = localStorage.getItem("tauriPrintAliases");
+    if (aliasesRaw) {
+      try {
+        const aliases: Record<string, string> = JSON.parse(aliasesRaw);
+        for (const alias in aliases) {
+          const option = document.createElement("option");
+          option.value = alias;
+          option.textContent = `[Alias] ${alias}`;
+          printerSelect.appendChild(option);
+        }
+      } catch(e) {}
+    }
     
     // Charger le profil après les imprimantes pour sélectionner la bonne
     loadProfilesFromStorage();
@@ -625,18 +656,38 @@ clearAllBtn.addEventListener("click", () => {
 async function setupTauriDragDrop() {
   await listen("tauri://drag-drop", async (event) => {
     const payload = event.payload as { paths?: string[] };
-    if (payload && payload.paths) {
-      statusMessage.textContent = "Analyse des fichiers...";
-      try {
-        const files: string[] = await invoke("process_dropped_paths", { paths: payload.paths });
-        files.forEach((path) => addFile(path));
-        statusMessage.textContent = `${files.length} fichier(s) ajouté(s).`;
-      } catch(e) {
-        console.error(e);
-        statusMessage.textContent = "Erreur lors de la lecture des dossiers.";
+      if (payload && payload.paths) {
+        await handleFiles(payload.paths);
+      }
+    });
+}
+
+async function handleFiles(rawPaths: string[]) {
+  statusMessage.textContent = "Analyse des fichiers...";
+  try {
+    const files: string[] = await invoke("process_dropped_paths", { paths: rawPaths });
+    let finalPaths: string[] = [];
+    
+    for (const path of files) {
+      if (path.toLowerCase().endsWith(".zip")) {
+        statusMessage.textContent = "Extraction de l'archive ZIP...";
+        try {
+          const extracted: string[] = await invoke("extract_zip", { zipPath: path });
+          finalPaths.push(...extracted);
+        } catch (e) {
+          console.error("Erreur extraction zip", path, e);
+        }
+      } else {
+        finalPaths.push(path);
       }
     }
-  });
+    
+    finalPaths.forEach((path) => addFile(path));
+    statusMessage.textContent = `${finalPaths.length} fichier(s) ajouté(s).`;
+  } catch(e) {
+    console.error(e);
+    statusMessage.textContent = "Erreur lors de la lecture des dossiers/fichiers.";
+  }
 }
 
 // ==== FILTRES ====
@@ -771,10 +822,20 @@ async function printWithRetry(
 let queueListenersSetup = false;
 
 async function executePrintProcess() {
-  const selectedPrinter = printerSelect.value;
+  let selectedPrinter = printerSelect.value;
   if (!selectedPrinter || filesToPrint.length === 0) return;
 
-  const fileCount = filesToPrint.length;
+  // Résoudre l'alias si nécessaire
+  const aliasesRaw = localStorage.getItem("tauriPrintAliases");
+  if (aliasesRaw) {
+    try {
+      const aliases: Record<string, string> = JSON.parse(aliasesRaw);
+      if (aliases[selectedPrinter]) {
+        selectedPrinter = aliases[selectedPrinter];
+      }
+    } catch(e) {}
+  }
+
   let options;
   try {
     options = getCurrentOptions();
@@ -783,8 +844,7 @@ async function executePrintProcess() {
     return;
   }
 
-  const copies = options.copies;
-  const confirmMsg = `Vous êtes sur le point d'imprimer ${fileCount} fichier(s) sur « ${selectedPrinter} ».\n\nContinuer ?`;
+  const confirmMsg = `Vous êtes sur le point d'imprimer ${filesToPrint.length} fichier(s) sur « ${selectedPrinter} ».\n\nContinuer ?`;
   if (!confirm(confirmMsg)) {
     return;
   }
@@ -798,7 +858,39 @@ async function executePrintProcess() {
   printLogs = [];
   successPaths = [];
 
-  const queueItems = filesToPrint.map((file, i) => ({
+  // === PRÉ-OPÉRATIONS ===
+  // Les pré-opérations (preopItems) priment sur les cases à cocher
+  // pour éviter les doublons. Si aucune preop, on utilise les cases.
+  let workingFiles: FileItem[] = [...filesToPrint];
+  let didMerge = false;
+  let didSlipSheet = false;
+
+  if (preopItems.length > 0) {
+    statusMessage.textContent = "Application des pré-opérations...";
+    for (const op of preopItems) {
+      if (op === "merge") {
+        workingFiles = await applyMergePdf(workingFiles);
+        didMerge = true;
+      } else if (op === "slip_sheet") {
+        workingFiles = await applySlipSheets(workingFiles);
+        didSlipSheet = true;
+      } else if (op === "watermark") {
+        console.warn("Pré-opération 'watermark' non implémentée côté backend.");
+      }
+    }
+  }
+
+  // Fallback aux cases à cocher si les preops n'ont pas déjà couvert
+  if (!didMerge && optMergePdf.checked) {
+    statusMessage.textContent = "Fusion des PDF...";
+    workingFiles = await applyMergePdf(workingFiles);
+  }
+  if (!didSlipSheet && optSlipSheets.checked) {
+    statusMessage.textContent = "Génération des pages de garde...";
+    workingFiles = await applySlipSheets(workingFiles);
+  }
+
+  const queueItems = workingFiles.map((file, i) => ({
       id: i.toString(),
       file_path: file.path,
       printer: selectedPrinter,
@@ -806,7 +898,7 @@ async function executePrintProcess() {
       status: "pending"
   }));
 
-  showProgress(0, filesToPrint.length);
+  showProgress(0, workingFiles.length);
   
   if (!queueListenersSetup) {
       queueListenersSetup = true;
@@ -861,6 +953,50 @@ async function executePrintProcess() {
 
   await invoke("start_queue", { items: queueItems });
   statusMessage.textContent = "File d'attente envoyée au backend...";
+}
+
+// ============================================================
+// PRÉ-OPÉRATIONS — Fusion PDF
+// ============================================================
+
+async function applyMergePdf(files: FileItem[]): Promise<FileItem[]> {
+  const pdfFiles = files.filter(f => f.path.toLowerCase().endsWith(".pdf"));
+  const nonPdfFiles = files.filter(f => !f.path.toLowerCase().endsWith(".pdf"));
+
+  if (pdfFiles.length < 2) return files; // Rien à fusionner
+
+  try {
+    const mergedPath: string = await invoke("merge_pdfs", {
+      paths: pdfFiles.map(f => f.path),
+    });
+    return [{ path: mergedPath, options: null }, ...nonPdfFiles];
+  } catch (err) {
+    console.error("Erreur fusion PDF:", err);
+    alert(`Erreur lors de la fusion des PDF : ${err}`);
+    return files; // Continuer avec la liste originale
+  }
+}
+
+// ============================================================
+// PRÉ-OPÉRATIONS — Pages de garde intercalaires
+// ============================================================
+
+async function applySlipSheets(files: FileItem[]): Promise<FileItem[]> {
+  if (files.length === 0) return files;
+
+  const result: FileItem[] = [];
+  for (const file of files) {
+    const fileName = file.path.split(/[\\/]/).pop() || file.path;
+    try {
+      const slipPath: string = await invoke("generate_slip_sheet", { text: fileName });
+      result.push({ path: slipPath, options: null });
+    } catch (err) {
+      console.error("Erreur page de garde:", err);
+      // Continuer sans la page de garde pour ce fichier
+    }
+    result.push(file);
+  }
+  return result;
 }
 
 pauseQueueBtn.addEventListener("click", () => {
@@ -1231,16 +1367,13 @@ dropZone.addEventListener("click", async () => {
     const selected = await open({
       multiple: true,
       filters: [{
-        name: 'Documents',
-        extensions: ['pdf', 'png', 'jpg', 'jpeg', 'txt', 'docx']
+        name: 'Documents & Archives',
+        extensions: ['pdf', 'png', 'jpg', 'jpeg', 'txt', 'docx', 'zip']
       }]
     });
     
     if (selected && Array.isArray(selected) && selected.length > 0) {
-      statusMessage.textContent = "Analyse des fichiers sélectionnés...";
-      const files: string[] = await invoke("process_dropped_paths", { paths: selected });
-      files.forEach((path) => addFile(path));
-      statusMessage.textContent = `${files.length} fichier(s) ajouté(s).`;
+      await handleFiles(selected);
     }
   } catch (err) {
     statusMessage.textContent = "Aucun fichier sélectionné.";
@@ -1383,4 +1516,70 @@ dashboardCloseBtn.addEventListener("click", () => {
   setTimeout(() => {
     dashboardModal.classList.add("hidden");
   }, 300);
+});
+
+// ============================================================
+// GESTION DES ALIAS
+// ============================================================
+
+function loadAliases() {
+  const aliasesRaw = localStorage.getItem("tauriPrintAliases");
+  const aliases: Record<string, string> = aliasesRaw ? JSON.parse(aliasesRaw) : {};
+  
+  if (aliasList) {
+    aliasList.innerHTML = "";
+    const keys = Object.keys(aliases);
+    if (keys.length === 0) {
+      aliasList.innerHTML = `<li class="text-sm text-zinc-500 text-center py-8">Aucun alias configuré</li>`;
+    } else {
+      keys.forEach(alias => {
+        const li = document.createElement("li");
+        li.className = "flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50 p-2 rounded border border-zinc-200 dark:border-zinc-800";
+        li.innerHTML = `
+          <div>
+            <span class="font-bold text-sm">${alias}</span>
+            <span class="text-xs text-zinc-500 ml-2">➡ ${aliases[alias]}</span>
+          </div>
+          <button class="text-red-500 hover:text-red-700 text-xs px-2 py-1" data-alias="${alias}">Supprimer</button>
+        `;
+        const delBtn = li.querySelector("button");
+        if (delBtn) {
+          delBtn.addEventListener("click", () => {
+            delete aliases[alias];
+            localStorage.setItem("tauriPrintAliases", JSON.stringify(aliases));
+            loadAliases();
+            loadPrinters(); // Rafraîchir la liste principale
+          });
+        }
+        aliasList.appendChild(li);
+      });
+    }
+  }
+}
+
+if (aliasAddBtn) {
+  aliasAddBtn.addEventListener("click", () => {
+    const name = aliasNameInput.value.trim();
+    const target = aliasPrinterSelect.value;
+    
+    if (!name || !target) {
+      alert("Veuillez saisir un nom et sélectionner une imprimante cible.");
+      return;
+    }
+    
+    const aliasesRaw = localStorage.getItem("tauriPrintAliases");
+    const aliases: Record<string, string> = aliasesRaw ? JSON.parse(aliasesRaw) : {};
+    
+    aliases[name] = target;
+    localStorage.setItem("tauriPrintAliases", JSON.stringify(aliases));
+    
+    aliasNameInput.value = "";
+    loadAliases();
+    loadPrinters();
+  });
+}
+
+// Initialiser les alias au démarrage
+window.addEventListener('DOMContentLoaded', () => {
+  loadAliases();
 });

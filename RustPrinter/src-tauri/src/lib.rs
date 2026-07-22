@@ -533,10 +533,13 @@ fn open_printer_properties(printer_name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn start_queue(app: tauri::AppHandle, state: State<'_, PrintQueueState>) -> Result<(), String> {
+fn start_queue(app: tauri::AppHandle, state: State<'_, PrintQueueState>, items: Vec<QueueItem>) -> Result<(), String> {
     {
         let mut data = state.data.lock().unwrap();
         if data.is_running { return Ok(()); }
+        if !items.is_empty() {
+            data.items = items;
+        }
         data.is_running = true;
         data.is_paused = false;
     }
@@ -593,7 +596,7 @@ fn pause_queue(state: State<'_, PrintQueueState>) {
 fn resume_queue(app: tauri::AppHandle, state: State<'_, PrintQueueState>) -> Result<(), String> {
     { let mut data = state.data.lock().unwrap(); data.is_paused = false; }
     state.notify.notify_waiters();
-    start_queue(app, state)
+    start_queue(app, state, Vec::new())
 }
 
 #[tauri::command]
@@ -1106,6 +1109,45 @@ fn apply_proxy(mode: String, url: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn extract_zip(zip_path: String) -> Result<Vec<String>, String> {
+    let file = std::fs::File::open(&zip_path).map_err(|e| format!("Impossible d'ouvrir le ZIP: {}", e))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Fichier ZIP invalide: {}", e))?;
+    
+    let temp_dir = std::env::temp_dir().join(format!("tauriprint_zip_{}", std::time::UNIX_EPOCH.elapsed().unwrap_or_default().as_millis()));
+    std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Erreur création temp dir: {}", e))?;
+    
+    let mut extracted_files = Vec::new();
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| format!("Erreur lecture ZIP index {}: {}", i, e))?;
+        
+        let outpath = match file.enclosed_name() {
+            Some(path) => path.to_owned(),
+            None => continue,
+        };
+        
+        let target_path = temp_dir.join(&outpath);
+        
+        if (*file.name()).ends_with('/') {
+            std::fs::create_dir_all(&target_path).unwrap_or_default();
+        } else {
+            if let Some(p) = target_path.parent() {
+                if !p.exists() {
+                    std::fs::create_dir_all(&p).unwrap_or_default();
+                }
+            }
+            let mut outfile = std::fs::File::create(&target_path).map_err(|e| format!("Erreur création fichier: {}", e))?;
+            std::io::copy(&mut file, &mut outfile).map_err(|e| format!("Erreur écriture fichier: {}", e))?;
+            
+            if let Some(path_str) = target_path.to_str() {
+                extracted_files.push(path_str.to_string());
+            }
+        }
+    }
+    
+    Ok(extracted_files)
+}
 
 
 // ============================================================
@@ -1147,7 +1189,8 @@ pub fn run() {
             reorder_queue,
             open_printer_properties,
             append_log,
-            apply_proxy
+            apply_proxy,
+            extract_zip
         ])
         .run(tauri::generate_context!())
         .expect("Erreur fatale lors du lancement de l'application Tauri");
